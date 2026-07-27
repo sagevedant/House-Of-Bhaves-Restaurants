@@ -5,7 +5,7 @@ services:
     region: singapore
     plan: free
     buildCommand: npm install && npm run build
-    startCommand: npm start
+    startCommand: node dist/index.js
     healthCheckPath: /health
     envVars:
       - key: PORT
@@ -14,19 +14,5 @@ services:
         value: ./data/spice-factory.db
       - key: MOCK_WHATSAPP
         value: "true"
-      - key: WHATSAPP_PHONE_NUMBER_ID
-        sync: false
-      - key: META_ACCESS_TOKEN
-        sync: false
-      - key: WEBHOOK_VERIFY_TOKEN
-        sync: false
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: MAKE_WEBHOOK_URL
-        sync: false
       - key: MANAGER_PHONE
         value: "919699533441"
-    disk:
-      name: sqlite-data
-      mountPath: /opt/render/project/src/data
-      sizeGB: 1
