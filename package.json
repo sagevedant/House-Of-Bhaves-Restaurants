@@ -2,11 +2,11 @@
   "name": "spice-factory-bot",
   "version": "1.0.0",
   "description": "WhatsApp restaurant table booking engine with Gemini AI — Spice Factory Rooftop & Lounge",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "tsx src/index.ts",
+    "start": "npm run build && node dist/index.js",
     "seed": "tsx src/db/seed.ts",
     "typecheck": "tsc --noEmit"
   },
