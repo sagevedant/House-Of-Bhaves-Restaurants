@@ -19,6 +19,11 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Interactive Simulator Demo
+app.get('/demo', (req, res) => {
+  res.sendFile(require('path').resolve('./demo.html'));
+});
+
 app.post('/api/reservations/demo', async (req, res) => {
   try {
     const randomDigits = Math.floor(1000 + Math.random() * 9000);

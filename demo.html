@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Spice Factory — Interactive WhatsApp Bot & Dashboard Simulator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Instrument+Sans:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Instrument Sans', -apple-system, sans-serif;
+      background: #0D0C0B;
+      color: #F3EFE6;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Grain Overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noiseFilter"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.04"/></svg>');
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* Top Navigation Bar */
+    header {
+      background: #161513;
+      border-bottom: 1.5px solid #2A2724;
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      font-size: 22px;
+      background: #25221F;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid #3A3530;
+    }
+    .brand h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #F3EFE6;
+    }
+    .brand p {
+      font-size: 12px;
+      color: #A8A29E;
+    }
+    .demo-badges {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .badge {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 5px 12px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-live {
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ADE80;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .pulse {
+      width: 6px; height: 6px;
+      background: #4ADE80;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #4ADE80;
+      animation: pulseAnim 1.5s infinite;
+    }
+    @keyframes pulseAnim { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    /* Main Container (Split Screen) */
+    .app-viewport {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 57px);
+    }
+
+    /* Left Pane: WhatsApp Simulator */
+    .simulator-pane {
+      width: 420px;
+      background: #121110;
+      border-right: 1.5px solid #2A2724;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      position: relative;
+    }
+    .sim-header {
+      width: 100%;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    .sim-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: #D6D3D1;
+    }
+    .sim-quick-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+      justify-content: center;
+    }
+    .chip-btn {
+      background: #1C1A17;
+      border: 1px solid #332F2A;
+      color: #F59E0B;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600;
+    }
+    .chip-btn:hover {
+      background: #282420;
+      border-color: #F59E0B;
+      color: #FFF;
+    }
+
+    /* Phone Mockup Frame */
+    .phone-frame {
+      width: 380px;
+      flex: 1;
+      background: #0B141A;
+      border: 8px solid #232220;
+      border-radius: 36px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8), 0 0 0 1px #383430;
+      overflow: hidden;
+      position: relative;
+    }
+    .phone-notch {
+      width: 120px;
+      height: 18px;
+      background: #232220;
+      margin: 0 auto;
+      border-bottom-left-radius: 12px;
+      border-bottom-right-radius: 12px;
+      position: absolute;
+      top: 0; left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+    }
+    .wa-header {
+      background: #1F2C34;
+      padding: 26px 14px 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #2A3942;
+    }
+    .wa-avatar {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #F59E0B, #D97706);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .wa-contact h4 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #E9EDEF;
+    }
+    .wa-contact p {
+      font-size: 11px;
+      color: #8696A0;
+    }
+
+    /* Chat Messages Body */
+    .wa-body {
+      flex: 1;
+      padding: 14px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background-image: radial-gradient(#182229 1px, transparent 1px);
+      background-size: 16px 16px;
+    }
+    .wa-msg {
+      max-width: 84%;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 12.5px;
+      line-height: 1.45;
+      position: relative;
+      word-wrap: break-word;
+      white-space: pre-line;
+    }
+    .wa-msg.inbound {
+      background: #202C33;
+      color: #E9EDEF;
+      align-self: flex-start;
+      border-top-left-radius: 2px;
+    }
+    .wa-msg.outbound {
+      background: #005C4B;
+      color: #E9EDEF;
+      align-self: flex-end;
+      border-top-right-radius: 2px;
+    }
+    .wa-msg-time {
+      font-size: 9.5px;
+      color: rgba(241, 241, 242, 0.6);
+      text-align: right;
+      margin-top: 4px;
+    }
+
+    /* Interactive WhatsApp Buttons inside message */
+    .wa-interactive-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding-top: 8px;
+    }
+    .wa-btn {
+      background: rgba(0, 168, 132, 0.15);
+      border: 1px solid #00A884;
+      color: #00A884;
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .wa-btn:hover {
+      background: #00A884;
+      color: #0B141A;
+    }
+
+    /* Interactive List Items */
+    .wa-list-box {
+      background: #182229;
+      border: 1px solid #2A3942;
+      border-radius: 8px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+    .wa-list-item {
+      padding: 8px 10px;
+      border-bottom: 1px solid #2A3942;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .wa-list-item:last-child { border-bottom: none; }
+    .wa-list-item:hover { background: #202C33; }
+    .wa-list-item-title { font-size: 12px; font-weight: 600; color: #00A884; }
+    .wa-list-item-desc { font-size: 10.5px; color: #8696A0; margin-top: 2px; }
+
+    /* Typing Bar */
+    .wa-input-bar {
+      background: #202C33;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .wa-input {
+      flex: 1;
+      background: #2A3942;
+      border: none;
+      color: #E9EDEF;
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      outline: none;
+    }
+    .wa-send-btn {
+      background: #00A884;
+      border: none;
+      color: #0B141A;
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    /* Right Pane: Hostess Ledger Dashboard */
+    .dashboard-pane {
+      flex: 1;
+      background: #11100F;
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .dash-header {
+      background: #1C1B18;
+      border: 2px solid #322E28;
+      padding: 20px 24px;
+      border-radius: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 0px #0A0908;
+      position: relative;
+    }
+    .dash-header::before {
+      content: '';
+      position: absolute;
+      top: -10px; left: 50%;
+      transform: translateX(-50%);
+      width: 100px; height: 14px;
+      background: #2A2723;
+      border-radius: 6px;
+      border: 1px solid #3E3932;
+    }
+    .dash-title h2 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: #F3EFE6;
+    }
+    .dash-title p {
+      font-size: 12px;
+      color: #A8A29E;
+      margin-top: 2px;
+    }
+
+    /* Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+    .metric-card {
+      background: #1C1B18;
+      border: 2px solid #322E28;
+      padding: 16px;
+      border-radius: 14px;
+      text-align: center;
+      box-shadow: 0 3px 0px #0A0908;
+    }
+    .metric-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 30px;
+      font-weight: 700;
+      color: #F59E0B;
+    }
+    .metric-label {
+      font-size: 11px;
+      color: #A8A29E;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 4px;
+    }
+
+    /* Toolbar & Search */
+    .toolbar {
+      background: #1C1B18;
+      border: 2px solid #322E28;
+      padding: 12px 16px;
+      border-radius: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .search-box {
+      flex: 1;
+      background: #121110;
+      border: 1.5px solid #3E3A33;
+      color: #F3EFE6;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+    }
+    .tabs {
+      display: flex;
+      gap: 6px;
+    }
+    .tab-btn {
+      background: #121110;
+      border: 1.5px solid #3E3A33;
+      color: #A8A29E;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: #F59E0B;
+      color: #0D0C0B;
+      border-color: #F59E0B;
+    }
+
+    /* Reservation Cards Grid */
+    .reservations-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .res-card {
+      background: #1C1B18;
+      border: 2px solid #322E28;
+      border-left: 4px dashed #F59E0B;
+      border-radius: 14px;
+      padding: 16px;
+      position: relative;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .res-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .guest-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: #F3EFE6;
+    }
+    .guest-phone {
+      font-size: 11px;
+      color: #F59E0B;
+      text-decoration: none;
+    }
+    .res-badge {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      transform: rotate(-3deg);
+    }
+    .badge-booked { background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid #F59E0B; }
+    .badge-completed { background: rgba(34, 197, 94, 0.15); color: #4ADE80; border: 1px solid #4ADE80; }
+    .badge-no-show { background: rgba(239, 68, 68, 0.15); color: #F87171; border: 1px solid #F87171; }
+
+    .res-info {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      background: #121110;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+    .res-info-label { font-size: 10px; color: #A8A29E; text-transform: uppercase; }
+    .res-info-val { font-weight: 600; color: #E7E5E4; margin-top: 2px; }
+    .code-tag {
+      font-family: monospace;
+      color: #F59E0B;
+      background: rgba(245, 158, 11, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .sticky-note {
+      background: #FEF3C7;
+      color: #78350F;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      transform: rotate(-1deg);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+    .res-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .action-btn {
+      flex: 1;
+      padding: 6px;
+      border-radius: 6px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid #3E3A33;
+      background: #121110;
+      color: #D6D3D1;
+    }
+    .action-btn:hover { background: #282420; color: #FFF; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">🍽️</div>
+      <div>
+        <h1>Spice Factory Rooftop & Lounge</h1>
+        <p>Interactive WhatsApp Engine & Hostess Ledger Demo</p>
+      </div>
+    </div>
+    <div class="demo-badges">
+      <div class="badge badge-live">
+        <div class="pulse"></div> Live Simulator Active
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Viewport -->
+  <div class="app-viewport">
+
+    <!-- Left Pane: WhatsApp Simulator -->
+    <div class="simulator-pane">
+      <div class="sim-header">
+        <div class="sim-title">📱 Live WhatsApp Bot Simulator</div>
+        <div class="sim-quick-actions">
+          <button class="chip-btn" onclick="startQuickFlow()">⚡ Auto-Book Demo</button>
+          <button class="chip-btn" onclick="sendHinglishText()">🗣️ Send Hinglish</button>
+          <button class="chip-btn" onclick="sendFAQQuestion()">❓ Ask Parking</button>
+          <button class="chip-btn" onclick="resetChat()">🔄 Reset</button>
+        </div>
+      </div>
+
+      <!-- Phone Frame -->
+      <div class="phone-frame">
+        <div class="phone-notch"></div>
+        <div class="wa-header">
+          <div class="wa-avatar">🍽️</div>
+          <div class="wa-contact">
+            <h4>Spice Factory Lounge</h4>
+            <p>Official Business Account • Online</p>
+          </div>
+        </div>
+
+        <div class="wa-body" id="waBody">
+          <!-- Chat messages rendered dynamically -->
+        </div>
+
+        <div class="wa-input-bar">
+          <input type="text" class="wa-input" id="waInput" placeholder="Type a message or Hinglish..." onkeypress="handleKeyPress(event)">
+          <button class="wa-send-btn" onclick="sendUserMessage()">➔</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Pane: Hostess Ledger Dashboard -->
+    <div class="dashboard-pane">
+      <div class="dash-header">
+        <div class="dash-title">
+          <h2>Hostess Front-Desk Ledger</h2>
+          <p>Real-time booking reception feed • Live synchronization</p>
+        </div>
+        <div style="font-family: 'Space Grotesk'; font-size: 13px; color: #F59E0B; font-weight: 700;" id="todayDate">
+          Mon, 28 Jul 2026
+        </div>
+      </div>
+
+      <!-- Metric Cards -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-value" id="mTotal">3</div>
+          <div class="metric-label">🍽️ Total Tables</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value" id="mBirthdays">1</div>
+          <div class="metric-label">🎂 Birthdays</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value" id="mParties">1</div>
+          <div class="metric-label">🎉 Parties</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value" id="mNoShows">0</div>
+          <div class="metric-label">❌ No-Shows</div>
+        </div>
+      </div>
+
+      <!-- Filter Toolbar -->
+      <div class="toolbar">
+        <input type="text" class="search-box" id="dashSearch" placeholder="Search guest name, phone, code..." oninput="filterDashboard()">
+        <div class="tabs">
+          <button class="tab-btn active" onclick="setTab('all', this)">All</button>
+          <button class="tab-btn" onclick="setTab('booked', this)">Booked</button>
+          <button class="tab-btn" onclick="setTab('completed', this)">Completed</button>
+          <button class="tab-btn" onclick="setTab('no_show', this)">No-Show</button>
+        </div>
+      </div>
+
+      <!-- Reservations Feed -->
+      <div class="reservations-grid" id="resGrid">
+        <!-- Initial seeded demo cards -->
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // State Memory
+    let currentStep = 'entry';
+    let stepData = {};
+
+    let reservations = [
+      { id: 1, name: 'Vedant Bhave', phone: '+91 96995 33441', guests: 4, occasion: 'birthday', date: '2026-07-28', time: '20:30', code: 'HOB-RES-4891', stage: 'booked' },
+      { id: 2, name: 'Amit Sharma', phone: '+91 98230 11223', guests: 6, occasion: 'party', date: '2026-07-28', time: '21:00', code: 'HOB-RES-9102', stage: 'completed' },
+      { id: 3, name: 'Priya Patel', phone: '+91 97112 44556', guests: 2, occasion: 'casual', date: '2026-07-28', time: '13:30', code: 'HOB-RES-3341', stage: 'booked' }
+    ];
+
+    let currentTabFilter = 'all';
+
+    // Render Dashboard Cards
+    function renderDashboard() {
+      const grid = document.getElementById('resGrid');
+      const search = document.getElementById('dashSearch').value.toLowerCase();
+
+      const filtered = reservations.filter(r => {
+        const matchesTab = currentTabFilter === 'all' || r.stage === currentTabFilter;
+        const matchesSearch = r.name.toLowerCase().includes(search) || r.phone.includes(search) || r.code.toLowerCase().includes(search);
+        return matchesTab && matchesSearch;
+      });
+
+      // Update metrics
+      document.getElementById('mTotal').innerText = reservations.filter(r => r.stage !== 'cancelled').length;
+      document.getElementById('mBirthdays').innerText = reservations.filter(r => r.occasion === 'birthday').length;
+      document.getElementById('mParties').innerText = reservations.filter(r => r.occasion === 'party' || r.occasion === 'corporate').length;
+      document.getElementById('mNoShows').innerText = reservations.filter(r => r.stage === 'no_show').length;
+
+      grid.innerHTML = filtered.map(r => `
+        <div class="res-card">
+          <div class="res-header">
+            <div>
+              <div class="guest-name">${r.name}</div>
+              <a href="https://wa.me/${r.phone.replace(/[^0-9]/g,'')}" target="_blank" class="guest-phone">${r.phone}</a>
+            </div>
+            <div class="res-badge badge-${r.stage.replace('_','-')}">${r.stage.replace('_',' ').toUpperCase()}</div>
+          </div>
+
+          ${r.occasion === 'birthday' ? `<div class="sticky-note">🎂 Birthday — Complimentary cake & décor ready!</div>` : ''}
+          ${r.occasion === 'anniversary' ? `<div class="sticky-note">🥂 Anniversary — Candlelight table setup!</div>` : ''}
+
+          <div class="res-info">
+            <div>
+              <div class="res-info-label">Guests</div>
+              <div class="res-info-val">👥 ${r.guests} PAX</div>
+            </div>
+            <div>
+              <div class="res-info-label">Occasion</div>
+              <div class="res-info-val">${r.occasion.toUpperCase()}</div>
+            </div>
+            <div>
+              <div class="res-info-label">Time</div>
+              <div class="res-info-val">📅 ${r.date} @ ${r.time}</div>
+            </div>
+            <div>
+              <div class="res-info-label">Code</div>
+              <div class="res-info-val"><span class="code-tag">${r.code}</span></div>
+            </div>
+          </div>
+
+          ${r.stage === 'booked' ? `
+            <div class="res-actions">
+              <button class="action-btn" onclick="updateStage(${r.id}, 'completed')">✅ Completed</button>
+              <button class="action-btn" onclick="updateStage(${r.id}, 'no_show')">❌ No-Show</button>
+            </div>
+          ` : ''}
+        </div>
+      `).join('');
+    }
+
+    function updateStage(id, stage) {
+      const res = reservations.find(r => r.id === id);
+      if (res) {
+        res.stage = stage;
+        renderDashboard();
+      }
+    }
+
+    function setTab(tab, btn) {
+      currentTabFilter = tab;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderDashboard();
+    }
+
+    function filterDashboard() {
+      renderDashboard();
+    }
+
+    // Chat Functions
+    function appendBotMsg(text, buttons = [], listItems = []) {
+      const body = document.getElementById('waBody');
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      let buttonsHtml = '';
+      if (buttons.length > 0) {
+        buttonsHtml = `<div class="wa-interactive-buttons">` +
+          buttons.map(b => `<button class="wa-btn" onclick="clickBtn('${b.id}', '${b.text}')">${b.text}</button>`).join('') +
+          `</div>`;
+      }
+
+      let listHtml = '';
+      if (listItems.length > 0) {
+        listHtml = `<div class="wa-list-box">` +
+          listItems.map(l => `<div class="wa-list-item" onclick="clickList('${l.id}', '${l.title}')">
+            <div class="wa-list-item-title">${l.title}</div>
+            <div class="wa-list-item-desc">${l.desc}</div>
+          </div>`).join('') +
+          `</div>`;
+      }
+
+      const msgHtml = `
+        <div class="wa-msg inbound">
+          ${text}
+          ${buttonsHtml}
+          ${listHtml}
+          <div class="wa-msg-time">${time}</div>
+        </div>
+      `;
+      body.insertAdjacentHTML('beforeend', msgHtml);
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function appendUserMsg(text) {
+      const body = document.getElementById('waBody');
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const msgHtml = `
+        <div class="wa-msg outbound">
+          ${text}
+          <div class="wa-msg-time">${time} • ✓✓</div>
+        </div>
+      `;
+      body.insertAdjacentHTML('beforeend', msgHtml);
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function resetChat() {
+      document.getElementById('waBody').innerHTML = '';
+      currentStep = 'entry';
+      stepData = {};
+      appendBotMsg(
+        "🍽️ Welcome to Spice Factory Rooftop & Lounge!\n\nWhether it's a cozy dinner, a birthday celebration, or an evening under the stars — we've got the perfect table for you.\n\nTap below to reserve your table instantly! 👇",
+        [
+          { id: 'book_table', text: 'Book a Table 🍽️' },
+          { id: 'view_menu', text: 'Our Menu 📋' },
+          { id: 'talk_to_us', text: 'Talk to Us 💬' }
+        ]
+      );
+    }
+
+    function clickBtn(id, title) {
+      appendUserMsg(title);
+      processInput(id, title);
+    }
+
+    function clickList(id, title) {
+      appendUserMsg(title);
+      processInput(id, title);
+    }
+
+    function sendUserMessage() {
+      const input = document.getElementById('waInput');
+      const val = input.value.trim();
+      if (!val) return;
+      appendUserMsg(val);
+      input.value = '';
+      processInput('text_input', val);
+    }
+
+    function handleKeyPress(e) {
+      if (e.key === 'Enter') sendUserMessage();
+    }
+
+    // Step Machine Logic
+    function processInput(id, text) {
+      setTimeout(() => {
+        // Hinglish / NLP simulation
+        if (text.toLowerCase().includes('kal') || text.toLowerCase().includes('bday') || text.toLowerCase().includes('birthday') || text.toLowerCase().includes('table for')) {
+          stepData.guests = 4;
+          stepData.occasion = 'birthday';
+          stepData.date = '2026-07-29';
+          stepData.time = '20:30';
+          currentStep = 'confirm';
+          appendBotMsg(
+            "🧠 *Gemini NLP Extracted:* 4 Guests • Birthday • Kal (29 Jul) • 8:30 PM\n\n📋 *Your Reservation Summary:*\n\n🍽️ Spice Factory Lounge\n👤 Guest\n👥 4 Guests\n🎂 Birthday Celebration\n📅 Wed, 29 Jul 2026\n🕐 8:30 PM\n\nDoes everything look good?",
+            [
+              { id: 'confirm_yes', text: 'Confirm ✅' },
+              { id: 'confirm_change', text: 'Change ↩️' }
+            ]
+          );
+          return;
+        }
+
+        // FAQ Interruption Handler Simulation
+        if (text.toLowerCase().includes('parking') || text.toLowerCase().includes('valet')) {
+          appendBotMsg("🚗 *FAQ:* Yes! We offer complimentary valet parking for all guests.");
+          setTimeout(() => {
+            appendBotMsg("Now let's get back to your booking! 😊");
+            repromptCurrentStep();
+          }, 800);
+          return;
+        }
+
+        switch (currentStep) {
+          case 'entry':
+            if (id === 'book_table') {
+              currentStep = 'guests';
+              appendBotMsg(
+                "👥 How many guests will be dining?\n\nTap a button or type any number:",
+                [
+                  { id: 'pax_2', text: '2 People' },
+                  { id: 'pax_4', text: '4 People' },
+                  { id: 'pax_6plus', text: '6+ Group' }
+                ]
+              );
+            } else if (id === 'view_menu') {
+              appendBotMsg("📋 Our Menu: https://spicefactory.com/menu\n\nCheck out today's Chef Specials!");
+            } else {
+              resetChat();
+            }
+            break;
+
+          case 'guests':
+            if (id === 'pax_2') stepData.guests = 2;
+            else if (id === 'pax_4') stepData.guests = 4;
+            else if (id === 'pax_6plus') stepData.guests = 6;
+            else stepData.guests = parseInt(text) || 2;
+
+            currentStep = 'occasion';
+            appendBotMsg(
+              "🎉 Any special occasion?\n\nWe'll make it extra special! Pick the vibe for your evening:",
+              [],
+              [
+                { id: 'occ_casual', title: 'Casual Dining 🍽️', desc: 'Just a great meal with friends' },
+                { id: 'occ_birthday', title: 'Birthday 🎂', desc: 'Complimentary cake & décor' },
+                { id: 'occ_anniversary', title: 'Anniversary 🥂', desc: 'Candlelight setup' },
+                { id: 'occ_party', title: 'Private Party 🎉', desc: 'Dedicated lounge area' }
+              ]
+            );
+            break;
+
+          case 'occasion':
+            stepData.occasion = id.replace('occ_', '');
+            currentStep = 'datetime_date';
+            appendBotMsg(
+              "📅 When would you like to dine?\n\nPick a date or type a day (e.g. \"Friday\", \"Kal\"):",
+              [
+                { id: 'date_today', text: 'Today (28 Jul)' },
+                { id: 'date_tomorrow', text: 'Tomorrow' },
+                { id: 'date_dayafter', text: 'Day After' }
+              ]
+            );
+            break;
+
+          case 'datetime_date':
+            stepData.date = '2026-07-28';
+            currentStep = 'datetime_time';
+            appendBotMsg(
+              "🕐 Pick your preferred time slot:",
+              [],
+              [
+                { id: 'time_1930', title: '7:30 PM', desc: '🌙 Dinner service' },
+                { id: 'time_2030', title: '8:30 PM', desc: '🌙 Dinner service' },
+                { id: 'time_2130', title: '9:30 PM', desc: '🌙 Dinner service' }
+              ]
+            );
+            break;
+
+          case 'datetime_time':
+            stepData.time = '20:30';
+            currentStep = 'confirm';
+            appendBotMsg(
+              `📋 *Your Reservation Summary:*\n\n🍽️ Spice Factory Lounge\n👤 Guest User\n👥 ${stepData.guests || 2} Guests\n🎂 Birthday Celebration\n📅 Mon, 28 Jul 2026\n🕐 8:30 PM\n\nDoes everything look good?`,
+              [
+                { id: 'confirm_yes', text: 'Confirm ✅' },
+                { id: 'confirm_change', text: 'Change ↩️' }
+              ]
+            );
+            break;
+
+          case 'confirm':
+            if (id === 'confirm_yes') {
+              currentStep = 'finalized';
+              const code = 'HOB-RES-' + Math.floor(1000 + Math.random() * 9000);
+              appendBotMsg(
+                `✅ *Table Reserved!*\n\n🎫 Booking Code: *${code}*\n🍽️ Spice Factory Rooftop & Lounge\n👥 ${stepData.guests || 2} Guests\n🎂 Birthday Celebration\n📅 Mon, 28 Jul 2026 @ 8:30 PM\n🎂 Complimentary cake & decoration included!\n\nShow this code at reception. See you soon! 🎉`
+              );
+
+              // Instantly push new reservation to Hostess Ledger on the Right Pane!
+              reservations.unshift({
+                id: Date.now(),
+                name: 'Guest User (Live Demo)',
+                phone: '+91 99887 76655',
+                guests: stepData.guests || 2,
+                occasion: stepData.occasion || 'birthday',
+                date: '2026-07-28',
+                time: '20:30',
+                code: code,
+                stage: 'booked'
+              });
+              renderDashboard();
+
+            } else {
+              resetChat();
+            }
+            break;
+        }
+      }, 500);
+    }
+
+    function repromptCurrentStep() {
+      // Reprompts after FAQ
+      processInput('reprompt', '');
+    }
+
+    function startQuickFlow() {
+      resetChat();
+      setTimeout(() => clickBtn('book_table', 'Book a Table 🍽️'), 400);
+      setTimeout(() => clickBtn('pax_4', '4 People'), 1000);
+      setTimeout(() => clickList('occ_birthday', 'Birthday 🎂'), 1600);
+      setTimeout(() => clickBtn('date_today', 'Today (28 Jul)'), 2200);
+      setTimeout(() => clickList('time_2030', '8:30 PM'), 2800);
+      setTimeout(() => clickBtn('confirm_yes', 'Confirm ✅'), 3400);
+    }
+
+    function sendHinglishText() {
+      resetChat();
+      setTimeout(() => {
+        document.getElementById('waInput').value = "Kal 4 log bday 8pm table clean chahiye";
+        sendUserMessage();
+      }, 400);
+    }
+
+    function sendFAQQuestion() {
+      document.getElementById('waInput').value = "valet parking hai kya?";
+      sendUserMessage();
+    }
+
+    // Init
+    resetChat();
+    renderDashboard();
+  </script>
+</body>
+</html>
