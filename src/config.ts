@@ -13,5 +13,5 @@ export const config = {
   geminiApiKey: process.env.GEMINI_API_KEY || '',
   makeWebhookUrl: process.env.MAKE_WEBHOOK_URL || '',
   managerPhone: process.env.MANAGER_PHONE || '919699533441',
-  mockWhatsApp: process.env.MOCK_WHATSAPP !== 'false'
+  mockWhatsApp: process.env.MOCK_WHATSAPP === 'true' || (!process.env.META_ACCESS_TOKEN && !process.env.WHATSAPP_PHONE_NUMBER_ID)
 };

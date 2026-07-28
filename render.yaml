@@ -13,6 +13,6 @@ services:
       - key: DATABASE_PATH
         value: ./data/spice-factory.db
       - key: MOCK_WHATSAPP
-        value: "true"
+        value: "false"
       - key: MANAGER_PHONE
         value: "919699533441"
