@@ -20,7 +20,9 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  // Respond immediately to acknowledge receipt
+  console.log('\n📩 [WEBHOOK POST RECEIVED]:', JSON.stringify(req.body, null, 2));
+
+  // Respond immediately to acknowledge receipt (<5 seconds SLA for Meta)
   res.status(200).send('EVENT_RECEIVED');
 
   const body = req.body;
@@ -29,18 +31,21 @@ router.post('/', (req, res) => {
   setImmediate(async () => {
     try {
       const parsedWebhooks = parseWebhookPayload(body);
+      console.log(`🔍 [WEBHOOK PARSER]: Found ${parsedWebhooks.length} webhook groups`);
       
       for (const webhook of parsedWebhooks) {
+        console.log(`📱 [WEBHOOK PHONE ID]: ${webhook.phoneNumberId} with ${webhook.events.length} events`);
         for (const event of webhook.events) {
           try {
+            console.log(`⚡ [HANDLING EVENT]:`, JSON.stringify(event, null, 2));
             await handleIncomingEvent(webhook.phoneNumberId, event);
           } catch (e) {
-            console.error('Error handling event:', e);
+            console.error('❌ Error handling event:', e);
           }
         }
       }
     } catch (e) {
-      console.error('Error parsing webhook payload:', e);
+      console.error('❌ Error parsing webhook payload:', e);
     }
   });
 });

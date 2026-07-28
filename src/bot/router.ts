@@ -14,17 +14,21 @@ import { findAnswer } from './knowledge';
 import { todayIST, currentTimeIST } from '../utils/dateHelpers';
 
 export async function handleIncomingEvent(phoneNumberId: string, event: WhatsAppEvent): Promise<void> {
-  if (event.type === 'status_update') return;
+  if (event.type === 'status_update') {
+    console.log('ℹ️ Router: Status update event ignored');
+    return;
+  }
   const msgEvent = event as WhatsAppMessageEvent;
 
-  let restaurant = await db.query.restaurants.findFirst({
-    where: eq(restaurants.whatsappPhoneNumberId, phoneNumberId)
-  });
+  let restaurantResult = await db.select().from(restaurants).where(eq(restaurants.whatsappPhoneNumberId, phoneNumberId)).limit(1);
+  let restaurant = restaurantResult[0];
 
   if (!restaurant) {
-    restaurant = await db.query.restaurants.findFirst();
+    console.warn(`⚠️ Router: No exact match for phoneNumberId '${phoneNumberId}'. Falling back to default restaurant...`);
+    const all = await db.select().from(restaurants).limit(1);
+    restaurant = all[0];
     if (!restaurant) {
-      console.error('No restaurant found');
+      console.error('❌ Router: No restaurants in database!');
       return;
     }
   }
@@ -32,11 +36,18 @@ export async function handleIncomingEvent(phoneNumberId: string, event: WhatsApp
   await markAsRead(restaurant, msgEvent.messageId);
 
   const phone = msgEvent.from;
-  let conversation = await db.query.conversations.findFirst({
-    where: and(eq(conversations.phone, phone), eq(conversations.restaurantId, restaurant.id))
-  });
+  if (!phone) {
+    console.warn('⚠️ Router: Missing sender phone number in event');
+    return;
+  }
 
-  if (!conversation) {
+  const convResult = await db.select().from(conversations).where(
+    and(eq(conversations.phone, phone), eq(conversations.restaurantId, restaurant.id))
+  ).limit(1);
+
+  let conversation: Conversation;
+  if (!convResult || convResult.length === 0) {
+    console.log(`✨ Router: Creating NEW conversation for phone '${phone}'`);
     const [newConv] = await db.insert(conversations).values({
       phone,
       restaurantId: restaurant.id,
@@ -47,6 +58,8 @@ export async function handleIncomingEvent(phoneNumberId: string, event: WhatsApp
     conversation = newConv;
     await handleEntry(msgEvent, conversation, restaurant, {});
     return;
+  } else {
+    conversation = convResult[0];
   }
 
   let stepData: StepData = JSON.parse(conversation.stepData || '{}');

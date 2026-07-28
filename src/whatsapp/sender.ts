@@ -85,17 +85,17 @@ export async function sendButtons(
       action: {
         buttons: buttons.slice(0, 3).map((btn) => ({
           type: 'reply',
-          reply: { id: btn.id, title: btn.title },
+          reply: { id: btn.id.slice(0, 256), title: btn.title.slice(0, 20) },
         })),
       },
     },
   };
 
   if (header) {
-    payload.interactive.header = { type: 'text', text: header };
+    payload.interactive.header = { type: 'text', text: header.slice(0, 60) };
   }
   if (footer) {
-    payload.interactive.footer = { text: footer };
+    payload.interactive.footer = { text: footer.slice(0, 60) };
   }
 
   return callMessagesApi(restaurant, payload);
@@ -119,13 +119,13 @@ export async function sendList(
       type: 'list',
       body: { text: bodyText },
       action: {
-        button: buttonLabel,
+        button: buttonLabel.slice(0, 20),
         sections: sections.map((sec) => ({
-          title: sec.title,
+          title: sec.title.slice(0, 24),
           rows: sec.rows.slice(0, 10).map((row) => ({
-            id: row.id,
-            title: row.title,
-            description: row.description,
+            id: row.id.slice(0, 200),
+            title: row.title.slice(0, 24),
+            ...(row.description ? { description: row.description.slice(0, 72) } : {}),
           })),
         })),
       },
@@ -133,10 +133,10 @@ export async function sendList(
   };
 
   if (header) {
-    payload.interactive.header = { type: 'text', text: header };
+    payload.interactive.header = { type: 'text', text: header.slice(0, 60) };
   }
   if (footer) {
-    payload.interactive.footer = { text: footer };
+    payload.interactive.footer = { text: footer.slice(0, 60) };
   }
 
   return callMessagesApi(restaurant, payload);
