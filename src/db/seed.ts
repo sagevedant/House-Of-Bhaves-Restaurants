@@ -28,7 +28,24 @@ export async function seedDatabase() {
       });
       console.log('✅ Seed: Inserted Spice Factory restaurant.');
     } else {
-      console.log('ℹ️ Seed: Restaurant already exists.');
+      // Auto-update credentials from environment variables if present
+      const updates: Partial<typeof existing> = {};
+      if (config.whatsappPhoneNumberId && config.whatsappPhoneNumberId !== existing.whatsappPhoneNumberId) {
+        updates.whatsappPhoneNumberId = config.whatsappPhoneNumberId;
+      }
+      if (config.metaAccessToken && config.metaAccessToken !== existing.metaAccessToken) {
+        updates.metaAccessToken = config.metaAccessToken;
+      }
+      if (config.managerPhone && config.managerPhone !== existing.managerPhone) {
+        updates.managerPhone = config.managerPhone;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await db.update(restaurants).set(updates).where(eq(restaurants.id, existing.id));
+        console.log('✅ Seed: Updated restaurant credentials from Environment Variables in DB.');
+      } else {
+        console.log('ℹ️ Seed: Restaurant already up to date.');
+      }
     }
   } catch (error) {
     console.error('❌ Seed error:', error);

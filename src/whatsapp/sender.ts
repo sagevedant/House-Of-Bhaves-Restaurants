@@ -18,17 +18,27 @@ export interface ListSection {
 }
 
 export async function callMessagesApi(restaurant: Restaurant, payload: object): Promise<void> {
-  if (config.mockWhatsApp || restaurant.metaAccessToken === 'PLACEHOLDER' || restaurant.metaAccessToken === 'default') {
+  const token = (restaurant.metaAccessToken && !restaurant.metaAccessToken.startsWith('PLACEHOLDER')) 
+    ? restaurant.metaAccessToken 
+    : config.metaAccessToken;
+
+  const phoneId = (restaurant.whatsappPhoneNumberId && !restaurant.whatsappPhoneNumberId.startsWith('PLACEHOLDER')) 
+    ? restaurant.whatsappPhoneNumberId 
+    : config.whatsappPhoneNumberId;
+
+  const isMock = config.mockWhatsApp || !token || token.startsWith('PLACEHOLDER') || token === 'default';
+
+  if (isMock) {
     console.log(`\n[MOCK WA - ${restaurant.name}] Payload:`, JSON.stringify(payload, null, 2));
     return;
   }
 
-  const url = `${config.metaApiBase}/${restaurant.whatsappPhoneNumberId}/messages`;
+  const url = `${config.metaApiBase}/${phoneId}/messages`;
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${restaurant.metaAccessToken}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -37,6 +47,8 @@ export async function callMessagesApi(restaurant: Restaurant, payload: object): 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[WhatsApp API Error - ${restaurant.name}]:`, response.status, errorText);
+    } else {
+      console.log(`✅ Outbound WhatsApp delivered via Phone ID '${phoneId}' to '${(payload as any).to}'`);
     }
   } catch (error) {
     console.error(`[WhatsApp API Failed - ${restaurant.name}]:`, error);
