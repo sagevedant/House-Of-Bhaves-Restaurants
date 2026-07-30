@@ -11,8 +11,10 @@ services:
       - key: PORT
         value: 10000
       - key: DATABASE_PATH
-        value: ./data/spice-factory.db
+        value: ./data/hob-restaurant.db
       - key: MOCK_WHATSAPP
         value: "false"
+      - key: WEBHOOK_VERIFY_TOKEN
+        value: "hob_restaurant_secret"
       - key: MANAGER_PHONE
         value: "919699533441"

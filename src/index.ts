@@ -147,7 +147,7 @@ app.post('/api/test/cron-review', async (req, res) => {
 // Multi-tenant slug route & fallback
 app.get('/restaurant/:slug?', async (req, res) => {
   try {
-    const slug = (req.params as any).slug || 'spice-factory';
+    const slug = (req.params as any).slug || 'hob-restaurant';
     
     // Find restaurant by slug
     let restaurantList = await db.select().from(restaurants).where(eq(restaurants.slug, slug)).limit(1);
@@ -156,8 +156,8 @@ app.get('/restaurant/:slug?', async (req, res) => {
     }
     
     const restaurant = restaurantList[0] || {
-      name: 'Spice Factory Rooftop & Lounge',
-      slug: 'spice-factory',
+      name: 'House of Bhaves Rooftop & Lounge (HOB)',
+      slug: 'hob-restaurant',
       address: 'Baner Road, Pune',
       prefix: 'HOB'
     };

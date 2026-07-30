@@ -16,8 +16,8 @@ export async function seedDatabase() {
 
     if (!existing) {
       const [inserted] = await db.insert(restaurants).values({
-        name: 'Spice Factory Rooftop & Lounge',
-        slug: 'spice-factory',
+        name: 'House of Bhaves Rooftop & Lounge (HOB)',
+        slug: 'hob-restaurant',
         address: 'Baner Road, Pune 411045',
         whatsappPhoneNumberId: config.whatsappPhoneNumberId || 'PLACEHOLDER_PHONE_ID',
         metaAccessToken: config.metaAccessToken || 'PLACEHOLDER_TOKEN',
@@ -31,9 +31,9 @@ export async function seedDatabase() {
         active: true,
       }).returning();
       restaurantId = inserted.id;
-      console.log('✅ Seed: Inserted Spice Factory restaurant.');
+      console.log('✅ Seed: Inserted House of Bhaves (HOB) restaurant.');
     } else {
-      const updates: Partial<typeof existing> = { slug: 'spice-factory' };
+      const updates: Partial<typeof existing> = { name: 'House of Bhaves Rooftop & Lounge (HOB)', slug: 'hob-restaurant' };
       if (config.whatsappPhoneNumberId && config.whatsappPhoneNumberId !== existing.whatsappPhoneNumberId) {
         updates.whatsappPhoneNumberId = config.whatsappPhoneNumberId;
       }
@@ -45,7 +45,7 @@ export async function seedDatabase() {
       }
 
       await db.update(restaurants).set(updates).where(eq(restaurants.id, existing.id));
-      console.log('✅ Seed: Updated restaurant credentials and slug in DB.');
+      console.log('✅ Seed: Updated HOB restaurant credentials and slug in DB.');
     }
 
     // Seed demo reservations if empty
