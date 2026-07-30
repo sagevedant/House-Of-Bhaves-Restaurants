@@ -25,6 +25,30 @@ app.get('/demo', (req, res) => {
   res.sendFile(require('path').resolve('./demo.html'));
 });
 
+// Meta App Compliance Routes (Privacy Policy, Terms of Service, User Data Deletion)
+app.get('/privacy', (req, res) => {
+  res.send(`
+    <!DOCTYPE html><html><head><title>Privacy Policy - House of Bhaves (HOB)</title><style>body{font-family:sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:0 auto;color:#222;}</style></head>
+    <body><h1>Privacy Policy</h1><p><strong>House of Bhaves (HOB)</strong> respects your privacy. We process customer names, phone numbers, and reservation details solely for table booking and restaurant communication via WhatsApp.</p>
+    <h2>Data Collection & Usage</h2><p>Data collected via WhatsApp is strictly used for managing table reservations, sending booking confirmations, and optional dining reminders.</p>
+    <h2>Data Protection</h2><p>We do not sell or share personal data with third parties. For data deletion requests, contact us at bhavevedant18@gmail.com.</p></body></html>
+  `);
+});
+
+app.get('/terms', (req, res) => {
+  res.send(`
+    <!DOCTYPE html><html><head><title>Terms of Service - House of Bhaves (HOB)</title><style>body{font-family:sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:0 auto;color:#222;}</style></head>
+    <body><h1>Terms of Service</h1><p>By using the <strong>House of Bhaves (HOB)</strong> WhatsApp reservation system, you agree to receive automated reservation confirmations and dining notifications.</p></body></html>
+  `);
+});
+
+app.get('/deletion', (req, res) => {
+  res.send(`
+    <!DOCTYPE html><html><head><title>User Data Deletion - House of Bhaves (HOB)</title><style>body{font-family:sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:0 auto;color:#222;}</style></head>
+    <body><h1>User Data Deletion Instructions</h1><p>To request deletion of your reservation data, please email <strong>bhavevedant18@gmail.com</strong> with your registered WhatsApp phone number. All data will be removed within 48 hours.</p></body></html>
+  `);
+});
+
 // Demo reservation creation endpoint
 app.post('/api/reservations/demo', async (req, res) => {
   try {
