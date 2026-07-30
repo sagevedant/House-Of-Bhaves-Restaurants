@@ -21,6 +21,7 @@ export async function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS restaurants (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
+      slug TEXT NOT NULL DEFAULT 'spice-factory',
       address TEXT NOT NULL,
       whatsapp_phone_number_id TEXT NOT NULL UNIQUE,
       meta_access_token TEXT NOT NULL,
@@ -30,6 +31,7 @@ export async function initializeDatabase() {
       opening_hours_dinner TEXT DEFAULT '19:00-23:00',
       closed_days TEXT DEFAULT '',
       max_pax_normal INTEGER DEFAULT 12,
+      google_review_url TEXT DEFAULT 'https://maps.google.com',
       active INTEGER DEFAULT 1
     )
   `);
@@ -43,6 +45,8 @@ export async function initializeDatabase() {
       current_step TEXT DEFAULT 'entry',
       step_data TEXT DEFAULT '{}',
       interrupted_step TEXT,
+      birthday_discount_claimed_year INTEGER,
+      last_dined_at TEXT,
       updated_at TEXT
     )
   `);
@@ -60,6 +64,7 @@ export async function initializeDatabase() {
       reservation_code TEXT UNIQUE,
       stage TEXT DEFAULT 'booked',
       special_request TEXT,
+      review_sent INTEGER DEFAULT 0,
       created_at TEXT
     )
   `);
@@ -67,6 +72,13 @@ export async function initializeDatabase() {
   await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_conversations_phone_restaurant ON conversations(phone, restaurant_id)`);
   await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_reservations_stage ON reservations(stage)`);
   await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_reservations_date ON reservations(date)`);
+
+  // Safe migration helpers for existing SQLite DBs
+  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN slug TEXT DEFAULT 'spice-factory';`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN google_review_url TEXT DEFAULT 'https://maps.google.com';`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE conversations ADD COLUMN birthday_discount_claimed_year INTEGER;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE conversations ADD COLUMN last_dined_at TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE reservations ADD COLUMN review_sent INTEGER DEFAULT 0;`); } catch {}
 
   await sqlite.execute(`PRAGMA journal_mode = WAL`);
   await sqlite.execute(`PRAGMA foreign_keys = ON`);

@@ -3,6 +3,7 @@ import { sqliteTable, integer, text, index } from 'drizzle-orm/sqlite-core';
 export const restaurants = sqliteTable('restaurants', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
+  slug: text('slug').notNull().default('spice-factory'),
   address: text('address').notNull(),
   whatsappPhoneNumberId: text('whatsapp_phone_number_id').notNull().unique(),
   metaAccessToken: text('meta_access_token').notNull(),
@@ -12,6 +13,7 @@ export const restaurants = sqliteTable('restaurants', {
   openingHoursDinner: text('opening_hours_dinner').default('19:00-23:00'),
   closedDays: text('closed_days').default(''),
   maxPaxNormal: integer('max_pax_normal').default(12),
+  googleReviewUrl: text('google_review_url').default('https://maps.google.com'),
   active: integer('active', { mode: 'boolean' }).default(true),
 });
 
@@ -23,6 +25,8 @@ export const conversations = sqliteTable('conversations', {
   currentStep: text('current_step', { enum: ['entry','guests','occasion','datetime_date','datetime_time','confirm','finalized'] }).default('entry'),
   stepData: text('step_data').default('{}'),
   interruptedStep: text('interrupted_step'),
+  birthdayDiscountClaimedYear: integer('birthday_discount_claimed_year'),
+  lastDinedAt: text('last_dined_at'),
   updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString())
 }, (table) => {
   return {
@@ -40,8 +44,9 @@ export const reservations = sqliteTable('reservations', {
   date: text('date').notNull(),
   time: text('time').notNull(),
   reservationCode: text('reservation_code').unique(),
-  stage: text('stage', { enum: ['booked','reminded','completed','no_show','cancelled'] }).default('booked'),
+  stage: text('stage', { enum: ['booked','seated','reminded','completed','no_show','cancelled'] }).default('booked'),
   specialRequest: text('special_request'),
+  reviewSent: integer('review_sent', { mode: 'boolean' }).default(false),
   createdAt: text('created_at').$defaultFn(() => new Date().toISOString())
 }, (table) => {
   return {

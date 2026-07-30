@@ -2,10 +2,11 @@ import 'dotenv/config';
 import express from 'express';
 import { config } from './config';
 import { db, initializeDatabase } from './db/connection';
-import { restaurants, reservations } from './db/schema';
+import { restaurants, reservations, conversations } from './db/schema';
 import webhookRouter from './whatsapp/webhook';
 import { sendToMakeWebhook } from './services/makeIntegration';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
+import { startScheduler, runBirthdayPushCron, runRetentionCron, runReviewRequestCron } from './scheduler/cron';
 
 const app = express();
 app.use(express.json());
@@ -24,19 +25,20 @@ app.get('/demo', (req, res) => {
   res.sendFile(require('path').resolve('./demo.html'));
 });
 
+// Demo reservation creation endpoint
 app.post('/api/reservations/demo', async (req, res) => {
   try {
     const randomDigits = Math.floor(1000 + Math.random() * 9000);
     const code = `HOB-RES-${randomDigits}`;
     
-    // Get first restaurant for demo
     const allRestaurants = await db.select().from(restaurants).limit(1);
     const restaurantId = allRestaurants.length > 0 ? allRestaurants[0].id : 1;
+    const restaurantName = allRestaurants.length > 0 ? allRestaurants[0].name : 'Spice Factory Rooftop & Lounge';
 
     const [newRes] = await db.insert(reservations).values({
       restaurantId,
       customerName: 'Vedant Bhave',
-      customerPhone: '919876543210',
+      customerPhone: '919699533441',
       guests: 4,
       occasion: 'birthday',
       date: new Date().toISOString().split('T')[0],
@@ -45,12 +47,11 @@ app.post('/api/reservations/demo', async (req, res) => {
       stage: 'booked',
     }).returning();
     
-    // Sync to Make.com
     await sendToMakeWebhook({
       event: 'demo_created',
       reservationId: newRes.id,
       reservationCode: newRes.reservationCode,
-      restaurantName: 'Spice Factory Rooftop & Lounge',
+      restaurantName,
       customerName: newRes.customerName,
       customerPhone: newRes.customerPhone,
       guests: newRes.guests,
@@ -68,6 +69,7 @@ app.post('/api/reservations/demo', async (req, res) => {
   }
 });
 
+// Status update endpoint (handles 'seated' | 'completed' | 'no_show' | 'cancelled')
 app.post('/api/reservations/status', async (req, res) => {
   try {
     const { reservationId, status } = req.body;
@@ -82,6 +84,28 @@ app.post('/api/reservations/status', async (req, res) => {
       .returning();
       
     if (updated) {
+      const currentYear = new Date().getFullYear();
+      const today = new Date().toISOString().split('T')[0];
+
+      // 🛡️ Once-Per-Year Birthday Guardrail & Last Dined Tracker
+      if (status === 'seated' || status === 'completed') {
+        const updates: any = { lastDinedAt: today };
+        if (updated.occasion === 'birthday') {
+          updates.birthdayDiscountClaimedYear = currentYear;
+          console.log(`🛡️ [Guardrail] Stamped 2026 birthday offer claimed for guest ${updated.customerPhone}`);
+        }
+
+        await db
+          .update(conversations)
+          .set(updates)
+          .where(
+            and(
+              eq(conversations.phone, updated.customerPhone),
+              eq(conversations.restaurantId, updated.restaurantId)
+            )
+          );
+      }
+
       await sendToMakeWebhook({
         event: 'status_updated',
         reservationId: updated.id,
@@ -104,11 +128,48 @@ app.post('/api/reservations/status', async (req, res) => {
   }
 });
 
-app.get('/restaurant', async (req, res) => {
+// Test Cron Trigger Endpoints
+app.post('/api/test/cron-birthday', async (req, res) => {
+  const result = await runBirthdayPushCron();
+  res.json(result);
+});
+
+app.post('/api/test/cron-retention', async (req, res) => {
+  const result = await runRetentionCron();
+  res.json(result);
+});
+
+app.post('/api/test/cron-review', async (req, res) => {
+  const result = await runReviewRequestCron();
+  res.json(result);
+});
+
+// Multi-tenant slug route & fallback
+app.get('/restaurant/:slug?', async (req, res) => {
   try {
-    const allRes = await db.select().from(reservations).orderBy(desc(reservations.createdAt));
+    const slug = (req.params as any).slug || 'spice-factory';
+    
+    // Find restaurant by slug
+    let restaurantList = await db.select().from(restaurants).where(eq(restaurants.slug, slug)).limit(1);
+    if (restaurantList.length === 0) {
+      restaurantList = await db.select().from(restaurants).limit(1);
+    }
+    
+    const restaurant = restaurantList[0] || {
+      name: 'Spice Factory Rooftop & Lounge',
+      slug: 'spice-factory',
+      address: 'Baner Road, Pune',
+      prefix: 'HOB'
+    };
+
+    const allRes = await db
+      .select()
+      .from(reservations)
+      .where(eq(reservations.restaurantId, restaurant.id))
+      .orderBy(desc(reservations.createdAt));
     
     const totalReservations = allRes.filter(r => r.stage !== 'cancelled').length;
+    const seatedCount = allRes.filter(r => r.stage === 'seated').length;
     const birthdays = allRes.filter(r => r.occasion?.toLowerCase() === 'birthday').length;
     const parties = allRes.filter(r => ['party', 'corporate'].includes(r.occasion?.toLowerCase() || '')).length;
     const noShows = allRes.filter(r => r.stage === 'no_show').length;
@@ -124,13 +185,14 @@ app.get('/restaurant', async (req, res) => {
       : allRes.map(r => {
         let badgeClass = '';
         if (r.stage === 'booked') badgeClass = 'badge-booked';
+        else if (r.stage === 'seated') badgeClass = 'badge-seated';
         else if (r.stage === 'completed') badgeClass = 'badge-completed';
         else if (r.stage === 'cancelled') badgeClass = 'badge-cancelled';
         else if (r.stage === 'no_show') badgeClass = 'badge-no-show';
         
         let stickyNote = '';
         if (r.occasion?.toLowerCase() === 'birthday') {
-          stickyNote = `<div class="sticky-note">🎂 Birthday celebration — Prep cake & décor!</div>`;
+          stickyNote = `<div class="sticky-note">🎂 Birthday — Prep cake & décor! (1x/yr Offer)</div>`;
         } else if (r.occasion?.toLowerCase() === 'anniversary') {
           stickyNote = `<div class="sticky-note">🥂 Anniversary — Candlelight setup!</div>`;
         }
@@ -139,8 +201,16 @@ app.get('/restaurant', async (req, res) => {
         if (r.stage === 'booked') {
           actions = `
             <div class="card-actions">
+              <button onclick="updateStatus(${r.id}, 'seated')" class="btn-seated">🪑 Mark Seated</button>
+              <button onclick="updateStatus(${r.id}, 'completed')" class="btn-complete">✅ Completed</button>
+              <button onclick="updateStatus(${r.id}, 'no_show')" class="btn-no-show">❌ No-Show</button>
+            </div>
+          `;
+        } else if (r.stage === 'seated') {
+          actions = `
+            <div class="card-actions">
               <button onclick="updateStatus(${r.id}, 'completed')" class="btn-complete">✅ Mark Completed</button>
-              <button onclick="updateStatus(${r.id}, 'no_show')" class="btn-no-show">❌ Mark No-Show</button>
+              <button onclick="updateStatus(${r.id}, 'no_show')" class="btn-no-show">❌ No-Show</button>
             </div>
           `;
         }
@@ -156,7 +226,7 @@ app.get('/restaurant', async (req, res) => {
               ${stickyNote}
               <div class="guest-info">
                 <h3 class="guest-name">${r.customerName}</h3>
-                <a href="https://wa.me/${r.customerPhone}" class="guest-phone" target="_blank">${r.customerPhone}</a>
+                <a href="https://wa.me/${r.customerPhone}" class="guest-phone" target="_blank">+${r.customerPhone}</a>
               </div>
               
               <div class="details-grid">
@@ -192,472 +262,241 @@ app.get('/restaurant', async (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Spice Factory | Dashboard</title>
-  <meta name="description" content="Private Booking Ledger for Spice Factory">
+  <title>${restaurant.name} | Hostess Ledger</title>
+  <meta name="description" content="Private Booking Ledger for ${restaurant.name}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root {
-      --bg: #11100F;
-      --card-bg: #1C1B18;
-      --border: #322E28;
-      --text-primary: #F3EFE6;
-      --text-muted: #A8A29E;
-      --amber: #F59E0B;
-      --amber-bg: rgba(245, 158, 11, 0.15);
-      --green: #22C55E;
-      --green-bg: rgba(34, 197, 94, 0.12);
-      --red: #EF4444;
-      --red-bg: rgba(239, 68, 68, 0.12);
-      --gray: #6B7280;
-      --gray-bg: rgba(107, 114, 128, 0.12);
-      --dash: #3E3A33;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background-color: var(--bg);
+      font-family: 'Instrument Sans', -apple-system, sans-serif;
+      background: #11100F;
+      color: #F3EFE6;
+      padding: 28px;
+      min-height: 100vh;
       background-image: radial-gradient(#2A2724 1px, transparent 1px);
       background-size: 24px 24px;
-      color: var(--text-primary);
-      font-family: 'Instrument Sans', sans-serif;
-      min-height: 100vh;
-      position: relative;
-      padding: 2rem;
     }
-
-    /* Grain overlay */
     body::before {
-      content: "";
+      content: '';
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
-      background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-      opacity: 0.045;
+      background: url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noiseFilter"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.045"/></svg>');
       pointer-events: none;
       z-index: 999;
     }
-
-    h1, h2, h3, .space-font {
-      font-family: 'Space Grotesk', sans-serif;
-    }
-
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-      position: relative;
-      z-index: 10;
-    }
-
-    /* Header */
+    .container { max-width: 1280px; margin: 0 auto; }
     .header-card {
-      background: var(--card-bg);
-      border: 2px solid var(--border);
+      background: #1C1B18;
+      border: 2px solid #322E28;
+      padding: 24px 30px;
       border-radius: 16px;
-      box-shadow: 0 4px 0px #0A0908;
-      padding: 2rem;
+      margin-bottom: 28px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 2rem;
+      flex-wrap: wrap;
+      gap: 16px;
+      box-shadow: 0 4px 0px #0A0908;
       position: relative;
     }
-
     .header-card::before {
       content: '';
       position: absolute;
-      top: -10px;
-      left: 50%;
+      top: -10px; left: 50%;
       transform: translateX(-50%);
-      width: 120px;
-      height: 20px;
-      background: #0A0908;
-      border-radius: 4px;
-      border: 2px solid #3E3A33;
+      width: 120px; height: 16px;
+      background: #2A2723;
+      border-radius: 6px;
+      border: 1px solid #3E3932;
     }
-
     .restaurant-title h1 {
-      font-size: 2.5rem;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 24px;
       font-weight: 700;
-      margin-bottom: 0.25rem;
-      letter-spacing: -0.02em;
+      color: #F3EFE6;
     }
-
-    .restaurant-title p {
-      color: var(--text-muted);
-      font-size: 1.1rem;
-    }
-
-    .header-right {
-      text-align: right;
-    }
-
+    .restaurant-title p { color: #A8A29E; font-size: 13px; margin-top: 4px; font-weight: 600; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
     .live-badge {
-      display: inline-flex;
+      background: rgba(34, 197, 94, 0.12);
+      border: 1.5px solid #22C55E;
+      color: #4ADE80;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 30px;
+      display: flex;
       align-items: center;
       gap: 8px;
-      background: rgba(34, 197, 94, 0.1);
-      border: 1px solid rgba(34, 197, 94, 0.3);
-      padding: 6px 12px;
-      border-radius: 20px;
-      color: var(--green);
-      font-weight: 600;
-      font-size: 0.85rem;
-      letter-spacing: 0.05em;
-      margin-bottom: 8px;
+      text-transform: uppercase;
     }
-
     .pulse {
-      width: 8px;
-      height: 8px;
-      background-color: var(--green);
+      width: 8px; height: 8px;
+      background: #22C55E;
       border-radius: 50%;
-      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
-      animation: pulse-green 2s infinite;
+      box-shadow: 0 0 10px #22C55E;
+      animation: pulse-anim 1.5s infinite;
     }
-
-    @keyframes pulse-green {
-      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
-      70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
-      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
-    }
-
-    .today-date {
-      color: var(--text-muted);
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 1.2rem;
-    }
-
-    /* Metrics */
+    @keyframes pulse-anim { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
     .metrics-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-      gap: 1.5rem;
-      margin-bottom: 2rem;
+      gap: 16px;
+      margin-bottom: 28px;
     }
-
     .metric-card {
-      background: var(--card-bg);
-      border: 2px solid var(--border);
+      background: #1C1B18;
+      border: 2px solid #322E28;
+      padding: 20px;
       border-radius: 14px;
-      padding: 1.5rem;
       box-shadow: 0 3px 0px #0A0908;
       text-align: center;
     }
-
     .metric-value {
       font-family: 'Space Grotesk', sans-serif;
       font-size: 34px;
       font-weight: 700;
-      color: var(--text-primary);
-      margin-bottom: 0.5rem;
+      color: #F59E0B;
+      margin-bottom: 4px;
     }
-
-    .metric-label {
-      color: var(--text-muted);
-      font-size: 0.85rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-weight: 600;
-    }
-
-    /* Toolbar */
+    .metric-label { font-size: 11px; color: #A8A29E; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; }
     .toolbar {
-      background: var(--card-bg);
-      border: 2px solid var(--border);
+      background: #1C1B18;
+      border: 2px solid #322E28;
+      padding: 16px 20px;
       border-radius: 14px;
-      padding: 1rem 1.5rem;
+      margin-bottom: 28px;
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 2rem;
-      box-shadow: 0 3px 0px #0A0908;
+      gap: 12px;
       flex-wrap: wrap;
-      gap: 1rem;
+      align-items: center;
+      box-shadow: 0 3px 0px #0A0908;
     }
-
     .search-input {
-      background: #11100F;
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      padding: 0.75rem 1rem;
-      border-radius: 8px;
-      font-family: 'Instrument Sans', sans-serif;
-      width: 300px;
-      outline: none;
-      transition: border-color 0.2s;
+      flex: 1;
+      min-width: 260px;
+      background: #121110;
+      border: 1.5px solid #3E3A33;
+      color: #F3EFE6;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 14px;
     }
-
-    .search-input:focus {
-      border-color: var(--amber);
-    }
-
-    .tabs {
-      display: flex;
-      gap: 0.5rem;
-      overflow-x: auto;
-    }
-
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
     .tab-btn {
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      padding: 0.5rem 1rem;
+      background: #121110;
+      border: 1.5px solid #3E3A33;
+      color: #A8A29E;
+      padding: 10px 16px;
       border-radius: 8px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 12px;
+      font-weight: 700;
       cursor: pointer;
-      font-family: 'Instrument Sans', sans-serif;
-      font-weight: 600;
-      transition: all 0.2s;
-      white-space: nowrap;
     }
-
-    .tab-btn:hover {
-      color: var(--text-primary);
-    }
-
-    .tab-btn.active {
-      background: #2A2724;
-      border-color: var(--border);
-      color: var(--text-primary);
-    }
-
-    /* Reservations Grid */
+    .tab-btn.active { background: #F59E0B; color: #0D0C0B; border-color: #F59E0B; }
     .reservations-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-      gap: 1.5rem;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 20px;
     }
-
     .reservation-card {
-      background: var(--card-bg);
-      border: 2px solid var(--border);
+      background: #1C1B18;
+      border: 2px solid #322E28;
+      border-left: 4px dashed #F59E0B;
       border-radius: 16px;
-      box-shadow: 0 3px 0px #0A0908;
-      position: relative;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-      overflow: hidden;
-    }
-
-    .reservation-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 0px #0A0908;
-    }
-
-    .card-content {
-      padding: 1.5rem;
-      border-left: 2px dashed var(--dash);
-      margin-left: 1.5rem;
+      padding: 20px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.5);
       position: relative;
     }
-
-    .guest-info {
-      margin-bottom: 1.5rem;
-    }
-
-    .guest-name {
-      font-size: 1.75rem;
-      margin-bottom: 0.25rem;
-    }
-
-    .guest-phone {
-      color: var(--text-muted);
-      text-decoration: none;
-      font-size: 1.1rem;
-      transition: color 0.2s;
-    }
-
-    .guest-phone:hover {
-      color: var(--amber);
-    }
-
+    .guest-info { margin-bottom: 14px; }
+    .guest-name { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; color: #F3EFE6; }
+    .guest-phone { color: #F59E0B; font-size: 13px; text-decoration: none; font-weight: 600; display: inline-block; margin-top: 2px; }
     .details-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 1.25rem;
-      margin-bottom: 1.5rem;
+      gap: 10px;
+      background: #121110;
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 14px;
     }
-
-    .detail-item {
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-    }
-
-    .detail-label {
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      letter-spacing: 0.05em;
-      font-weight: 600;
-    }
-
-    .detail-value {
-      font-size: 1.1rem;
-      font-weight: 500;
-    }
-
-    .code-highlight {
-      color: var(--amber);
-      font-family: monospace;
-      font-weight: 700;
-      background: rgba(245, 158, 11, 0.1);
-      padding: 2px 6px;
-      border-radius: 4px;
-      display: inline-block;
-    }
-
-    /* Rubber stamp */
+    .detail-label { font-size: 10px; color: #A8A29E; text-transform: uppercase; font-weight: 700; display: block; }
+    .detail-value { font-size: 13px; color: #F3EFE6; font-weight: 600; margin-top: 2px; }
+    .code-highlight { font-family: monospace; color: #F59E0B; }
     .stamp-badge {
       position: absolute;
-      top: 1.5rem;
-      right: 1.5rem;
-      padding: 0.25rem 0.75rem;
-      border: 2px solid;
-      border-radius: 4px;
+      top: 18px; right: 18px;
       font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px;
       font-weight: 700;
-      font-size: 0.85rem;
-      letter-spacing: 0.1em;
+      padding: 5px 10px;
+      border-radius: 6px;
       transform: rotate(-3deg);
       text-transform: uppercase;
     }
-
-    .badge-booked { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
-    .badge-completed { background: var(--green-bg); border-color: var(--green); color: var(--green); }
-    .badge-cancelled { background: var(--gray-bg); border-color: var(--gray); color: var(--gray); }
-    .badge-no-show { background: var(--red-bg); border-color: var(--red); color: var(--red); transform: rotate(4deg); }
-
+    .badge-booked { background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1.5px solid #F59E0B; }
+    .badge-seated { background: rgba(59, 130, 246, 0.15); color: #60A5FA; border: 1.5px solid #60A5FA; }
+    .badge-completed { background: rgba(34, 197, 94, 0.15); color: #4ADE80; border: 1.5px solid #4ADE80; }
+    .badge-no-show { background: rgba(239, 68, 68, 0.15); color: #F87171; border: 1.5px solid #F87171; }
+    .badge-cancelled { background: rgba(168, 162, 158, 0.15); color: #A8A29E; border: 1.5px solid #A8A29E; }
     .sticky-note {
-      position: absolute;
-      top: -10px;
-      right: 40%;
-      background: var(--amber);
-      color: #000;
-      padding: 0.5rem 1rem;
-      font-size: 0.85rem;
-      font-weight: 600;
-      transform: rotate(-2deg);
-      box-shadow: 2px 4px 10px rgba(0,0,0,0.3);
-      z-index: 2;
-      border-bottom-right-radius: 12px;
+      background: #FEF3C7;
+      color: #78350F;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      transform: rotate(-1deg);
     }
-
-    .card-actions {
-      display: flex;
-      gap: 1rem;
-      margin-top: 1.5rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid var(--border);
-    }
-
-    .card-actions button {
+    .card-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .btn-seated, .btn-complete, .btn-no-show {
       flex: 1;
-      padding: 0.75rem;
+      padding: 8px 12px;
       border-radius: 8px;
-      font-family: 'Instrument Sans', sans-serif;
-      font-weight: 600;
-      cursor: pointer;
-      background: transparent;
-      transition: all 0.2s;
-    }
-
-    .btn-complete {
-      border: 1px solid var(--green);
-      color: var(--green);
-    }
-    .btn-complete:hover {
-      background: var(--green-bg);
-    }
-
-    .btn-no-show {
-      border: 1px solid var(--red);
-      color: var(--red);
-    }
-    .btn-no-show:hover {
-      background: var(--red-bg);
-    }
-
-    .empty-state {
-      grid-column: 1 / -1;
-      text-align: center;
-      padding: 4rem 2rem;
-      background: var(--card-bg);
-      border: 2px dashed var(--border);
-      border-radius: 16px;
-    }
-
-    .empty-state h2 {
-      font-size: 2rem;
-      margin-bottom: 0.5rem;
-    }
-
-    .empty-state p {
-      color: var(--text-muted);
-      margin-bottom: 2rem;
-    }
-
-    .demo-btn {
-      background: var(--text-primary);
-      color: var(--bg);
-      border: none;
-      padding: 0.75rem 1.5rem;
-      border-radius: 8px;
-      font-family: 'Instrument Sans', sans-serif;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px;
       font-weight: 700;
       cursor: pointer;
-      transition: opacity 0.2s;
+      border: 1.5px solid;
     }
-    .demo-btn:hover {
-      opacity: 0.9;
-    }
-
-    @media (max-width: 768px) {
-      .header-card {
-        flex-direction: column;
-        text-align: center;
-        gap: 1.5rem;
-      }
-      .header-right {
-        text-align: center;
-      }
-      .toolbar {
-        flex-direction: column;
-      }
-      .search-input {
-        width: 100%;
-      }
-      .tabs {
-        width: 100%;
-        justify-content: center;
-        flex-wrap: wrap;
-      }
-    }
+    .btn-seated { background: rgba(59, 130, 246, 0.1); border-color: #3B82F6; color: #60A5FA; }
+    .btn-seated:hover { background: #3B82F6; color: #FFF; }
+    .btn-complete { background: rgba(34, 197, 94, 0.1); border-color: #22C55E; color: #4ADE80; }
+    .btn-complete:hover { background: #22C55E; color: #FFF; }
+    .btn-no-show { background: rgba(239, 68, 68, 0.1); border-color: #EF4444; color: #F87171; }
+    .btn-no-show:hover { background: #EF4444; color: #FFF; }
+    .empty-state { text-align: center; padding: 60px 20px; grid-column: 1 / -1; background: #1C1B18; border: 2px solid #322E28; border-radius: 16px; }
+    .demo-btn { margin-top: 16px; background: #F59E0B; border: none; color: #0D0C0B; padding: 12px 24px; border-radius: 10px; font-family: 'Space Grotesk', sans-serif; font-weight: 700; cursor: pointer; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header-card">
       <div class="restaurant-title">
-        <h1>Spice Factory</h1>
-        <p>Private Booking Ledger</p>
+        <h1>${restaurant.name}</h1>
+        <p>Hostess Front-Desk Ledger • URL Slug: /restaurant/${restaurant.slug}</p>
       </div>
       <div class="header-right">
         <div class="live-badge">
-          <div class="pulse"></div> LIVE
+          <div class="pulse"></div> Live Reception Sync
         </div>
-        <div class="today-date" id="dateDisplay"></div>
       </div>
     </div>
 
     <div class="metrics-grid">
       <div class="metric-card">
         <div class="metric-value">${totalReservations}</div>
-        <div class="metric-label">🍽️ Total Reservations</div>
+        <div class="metric-label">🍽️ Total Tables</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">${seatedCount}</div>
+        <div class="metric-label">🪑 Seated Now</div>
       </div>
       <div class="metric-card">
         <div class="metric-value">${birthdays}</div>
@@ -665,7 +504,7 @@ app.get('/restaurant', async (req, res) => {
       </div>
       <div class="metric-card">
         <div class="metric-value">${parties}</div>
-        <div class="metric-label">🎉 Parties / Corporate</div>
+        <div class="metric-label">🎉 Parties</div>
       </div>
       <div class="metric-card">
         <div class="metric-value">${noShows}</div>
@@ -678,6 +517,7 @@ app.get('/restaurant', async (req, res) => {
       <div class="tabs" id="statusTabs">
         <button class="tab-btn active" data-filter="all">All</button>
         <button class="tab-btn" data-filter="booked">Booked</button>
+        <button class="tab-btn" data-filter="seated">Seated</button>
         <button class="tab-btn" data-filter="completed">Completed</button>
         <button class="tab-btn" data-filter="no_show">No-Show</button>
       </div>
@@ -689,27 +529,23 @@ app.get('/restaurant', async (req, res) => {
   </div>
 
   <script>
-    // Set date
-    const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    document.getElementById('dateDisplay').textContent = new Date().toLocaleDateString('en-US', dateOptions);
-
-    // Filtering logic
     const searchInput = document.getElementById('searchInput');
     const tabs = document.querySelectorAll('.tab-btn');
     const cards = document.querySelectorAll('.reservation-card');
+
     let currentFilter = 'all';
 
     function filterCards() {
-      const searchTerm = searchInput.value.toLowerCase();
-      
+      const searchVal = searchInput.value.toLowerCase();
+
       cards.forEach(card => {
-        const text = card.getAttribute('data-search');
-        const status = card.getAttribute('data-status');
-        
-        const matchesSearch = text.includes(searchTerm);
-        const matchesTab = currentFilter === 'all' || status === currentFilter;
-        
-        if (matchesSearch && matchesTab) {
+        const status = card.dataset.status;
+        const searchData = card.dataset.search;
+
+        const matchesStatus = currentFilter === 'all' || status === currentFilter;
+        const matchesSearch = searchData.includes(searchVal);
+
+        if (matchesStatus && matchesSearch) {
           card.style.display = 'block';
         } else {
           card.style.display = 'none';
@@ -723,17 +559,17 @@ app.get('/restaurant', async (req, res) => {
       tab.addEventListener('click', () => {
         tabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        currentFilter = tab.getAttribute('data-filter');
+        currentFilter = tab.dataset.filter;
         filterCards();
       });
     });
 
-    async function updateStatus(reservationId, status) {
+    async function updateStatus(id, status) {
       try {
         const res = await fetch('/api/reservations/status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reservationId, status })
+          body: JSON.stringify({ reservationId: id, status })
         });
         if (res.ok) {
           window.location.reload();
@@ -778,9 +614,12 @@ async function main() {
   const { seedDatabase } = await import('./db/seed');
   await seedDatabase();
   
+  // Start background outbound cron scheduler
+  startScheduler();
+  
   app.listen(config.PORT, () => {
     console.log(`🍽️ Spice Factory Bot running on port ${config.PORT}`);
-    console.log(`📊 Dashboard: http://localhost:${config.PORT}/restaurant`);
+    console.log(`📊 Multi-Tenant Dashboard: http://localhost:${config.PORT}/restaurant/spice-factory`);
     console.log(`🔗 Webhook: http://localhost:${config.PORT}/webhook`);
   });
 }
