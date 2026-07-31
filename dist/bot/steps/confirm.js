@@ -6,6 +6,7 @@ exports.handlePostFinalize = handlePostFinalize;
 const sender_1 = require("../../whatsapp/sender");
 const connection_1 = require("../../db/connection");
 const schema_1 = require("../../db/schema");
+const drizzle_orm_1 = require("drizzle-orm");
 const reservationCode_1 = require("../../utils/reservationCode");
 const makeIntegration_1 = require("../../services/makeIntegration");
 const dateHelpers_1 = require("../../utils/dateHelpers");
@@ -52,6 +53,22 @@ async function handleFinalize(event, conversation, restaurant, stepData) {
         stage: 'booked',
         specialRequest: stepData.specialRequest || null,
     }).returning();
+    // Also insert into commercial bookings table if client exists
+    const clientMatch = await connection_1.db.select().from(schema_1.clients).where((0, drizzle_orm_1.eq)(schema_1.clients.slug, restaurant.slug)).limit(1);
+    if (clientMatch.length > 0) {
+        await connection_1.db.insert(schema_1.bookings).values({
+            clientId: clientMatch[0].id,
+            customerName,
+            customerPhone: conversation.phone,
+            guests: stepData.guests,
+            occasion: stepData.occasion || 'casual',
+            date: stepData.date,
+            time: stepData.time,
+            reservationCode: code,
+            status: 'booked',
+            specialRequest: stepData.specialRequest || null,
+        });
+    }
     stepData.reservationId = reservation.id;
     stepData.reservationCode = code;
     await (0, makeIntegration_1.sendToMakeWebhook)({
@@ -82,7 +99,6 @@ async function handleFinalize(event, conversation, restaurant, stepData) {
     return { nextStep: 'finalized', stepData };
 }
 async function handlePostFinalize(event, conversation, restaurant, stepData) {
-    // Return without doing anything; entry.ts handles post-finalize interactions
     return;
 }
 //# sourceMappingURL=confirm.js.map

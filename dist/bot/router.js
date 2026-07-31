@@ -20,10 +20,14 @@ async function handleIncomingEvent(phoneNumberId, event) {
         return;
     }
     const msgEvent = event;
-    let restaurantResult = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.whatsappPhoneNumberId, phoneNumberId)).limit(1);
+    // Look up active restaurant (prioritize Big Bang Community BBC for live demo)
+    let restaurantResult = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.slug, 'big-bang-community')).limit(1);
+    if (!restaurantResult || restaurantResult.length === 0) {
+        restaurantResult = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.whatsappPhoneNumberId, phoneNumberId)).limit(1);
+    }
     let restaurant = restaurantResult[0];
     if (!restaurant) {
-        console.warn(`⚠️ Router: No exact match for phoneNumberId '${phoneNumberId}'. Falling back to default restaurant...`);
+        console.warn(`⚠️ Router: Falling back to first restaurant in database...`);
         const all = await connection_1.db.select().from(schema_1.restaurants).limit(1);
         restaurant = all[0];
         if (!restaurant) {
@@ -40,7 +44,7 @@ async function handleIncomingEvent(phoneNumberId, event) {
     const convResult = await connection_1.db.select().from(schema_1.conversations).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.conversations.phone, phone), (0, drizzle_orm_1.eq)(schema_1.conversations.restaurantId, restaurant.id))).limit(1);
     let conversation;
     if (!convResult || convResult.length === 0) {
-        console.log(`✨ Router: Creating NEW conversation for phone '${phone}'`);
+        console.log(`✨ Router: Creating NEW conversation for phone '${phone}' at restaurant '${restaurant.name}'`);
         const [newConv] = await connection_1.db.insert(schema_1.conversations).values({
             phone,
             restaurantId: restaurant.id,

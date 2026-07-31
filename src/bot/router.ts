@@ -20,11 +20,15 @@ export async function handleIncomingEvent(phoneNumberId: string, event: WhatsApp
   }
   const msgEvent = event as WhatsAppMessageEvent;
 
-  let restaurantResult = await db.select().from(restaurants).where(eq(restaurants.whatsappPhoneNumberId, phoneNumberId)).limit(1);
+  // Look up active restaurant (prioritize Big Bang Community BBC for live demo)
+  let restaurantResult = await db.select().from(restaurants).where(eq(restaurants.slug, 'big-bang-community')).limit(1);
+  if (!restaurantResult || restaurantResult.length === 0) {
+    restaurantResult = await db.select().from(restaurants).where(eq(restaurants.whatsappPhoneNumberId, phoneNumberId)).limit(1);
+  }
   let restaurant = restaurantResult[0];
 
   if (!restaurant) {
-    console.warn(`⚠️ Router: No exact match for phoneNumberId '${phoneNumberId}'. Falling back to default restaurant...`);
+    console.warn(`⚠️ Router: Falling back to first restaurant in database...`);
     const all = await db.select().from(restaurants).limit(1);
     restaurant = all[0];
     if (!restaurant) {
@@ -47,7 +51,7 @@ export async function handleIncomingEvent(phoneNumberId: string, event: WhatsApp
 
   let conversation: Conversation;
   if (!convResult || convResult.length === 0) {
-    console.log(`✨ Router: Creating NEW conversation for phone '${phone}'`);
+    console.log(`✨ Router: Creating NEW conversation for phone '${phone}' at restaurant '${restaurant.name}'`);
     const [newConv] = await db.insert(conversations).values({
       phone,
       restaurantId: restaurant.id,

@@ -2,7 +2,8 @@ import type { WhatsAppMessageEvent } from '../../whatsapp/parser';
 import type { Restaurant, Conversation, StepData } from '../../db/schema';
 import { sendText, sendButtons } from '../../whatsapp/sender';
 import { db } from '../../db/connection';
-import { reservations } from '../../db/schema';
+import { reservations, bookings, clients } from '../../db/schema';
+import { eq } from 'drizzle-orm';
 import { generateReservationCode } from '../../utils/reservationCode';
 import { sendToMakeWebhook } from '../../services/makeIntegration';
 import { formatDate, formatTime, todayIST, currentTimeIST } from '../../utils/dateHelpers';
@@ -66,6 +67,23 @@ export async function handleFinalize(
     specialRequest: stepData.specialRequest || null,
   }).returning();
 
+  // Also insert into commercial bookings table if client exists
+  const clientMatch = await db.select().from(clients).where(eq(clients.slug, restaurant.slug)).limit(1);
+  if (clientMatch.length > 0) {
+    await db.insert(bookings).values({
+      clientId: clientMatch[0].id,
+      customerName,
+      customerPhone: conversation.phone,
+      guests: stepData.guests!,
+      occasion: stepData.occasion || 'casual',
+      date: stepData.date!,
+      time: stepData.time!,
+      reservationCode: code,
+      status: 'booked',
+      specialRequest: stepData.specialRequest || null,
+    });
+  }
+
   stepData.reservationId = reservation.id;
   stepData.reservationCode = code;
 
@@ -108,6 +126,5 @@ export async function handlePostFinalize(
   restaurant: Restaurant,
   stepData: StepData,
 ): Promise<void> {
-  // Return without doing anything; entry.ts handles post-finalize interactions
   return;
 }
