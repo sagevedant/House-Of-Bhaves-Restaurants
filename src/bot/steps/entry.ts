@@ -4,6 +4,9 @@ import { sendText, sendButtons, sendList } from '../../whatsapp/sender';
 import { extractSlots } from '../../ai/slotExtractor';
 import { findAnswer } from '../knowledge';
 import { todayIST, currentTimeIST, formatDate, formatTime, getAvailableTimeSlots } from '../../utils/dateHelpers';
+import { db } from '../../db/connection';
+import { bookings, reservations, clients } from '../../db/schema';
+import { eq, and, desc } from 'drizzle-orm';
 
 export async function handleEntry(
   event: WhatsAppMessageEvent,
@@ -34,7 +37,7 @@ export async function handleEntry(
       return { nextStep: 'entry', stepData };
     }
     if (event.buttonId === 'talk_to_us') {
-      await sendText(restaurant, phone, `📞 You can reach our manager at ${restaurant.managerPhone || '+919699533441'}.`);
+      await sendText(restaurant, phone, `📞 You can reach our manager at ${restaurant.managerPhone || '+919511673214'}.`);
       return { nextStep: 'entry', stepData };
     }
     if (event.buttonId === 'new_booking') {
@@ -46,12 +49,12 @@ export async function handleEntry(
       return { nextStep: 'guests', stepData: {} };
     }
     if (event.buttonId === 'modify_booking') {
-      await sendText(restaurant, phone, 'Please call the restaurant manager to modify your booking.');
+      await sendText(restaurant, phone, `Please call our manager at ${restaurant.managerPhone || '+919511673214'} to modify your booking.`);
       return { nextStep: 'finalized', stepData };
     }
     if (event.buttonId === 'cancel_booking') {
-      await sendText(restaurant, phone, 'Your booking has been cancelled.');
-      return { nextStep: 'finalized', stepData };
+      await cancelUserBooking(phone, restaurant, stepData);
+      return { nextStep: 'entry', stepData: {} };
     }
   }
 
@@ -93,7 +96,7 @@ export async function handleEntry(
           await sendButtons(restaurant, phone, '📅 When would you like to dine?\n\nPick a date or type a day (e.g. "Friday", "Kal"):', [ { id: 'date_today', title: 'Today' }, { id: 'date_tomorrow', title: 'Tomorrow' }, { id: 'date_dayafter', title: 'Day After' } ], '📅 Select Date');
           return { nextStep: 'datetime_date', stepData };
         } else if (!stepData.time) {
-          const slots = getAvailableTimeSlots(stepData.date!, restaurant.openingHoursLunch || '12:00-15:30', restaurant.openingHoursDinner || '19:00-23:00');
+          const slots = getAvailableTimeSlots(stepData.date!, restaurant.openingHoursLunch || '', restaurant.openingHoursDinner || '19:00-00:30');
           const sections = slots.filter(s => s.slots.length > 0).map(s => ({ title: `${s.period} service`, rows: s.slots.map(slot => ({ id: `time_${slot.replace(':', '_')}`, title: formatTime(slot) })) }));
           if (sections.length > 0) {
             await sendList(restaurant, phone, '🕐 Pick your preferred time slot:', 'Select Time', sections);
@@ -113,18 +116,57 @@ export async function handleEntry(
       await sendWelcome(restaurant, phone);
       return { nextStep: 'entry', stepData };
     }
-    if (extracted.intent === 'cancel' && conversation.currentStep === 'finalized') {
-      await sendText(restaurant, phone, 'Your booking has been cancelled.');
-      return { nextStep: 'finalized', stepData };
+    if (extracted.intent === 'cancel') {
+      await cancelUserBooking(phone, restaurant, stepData);
+      return { nextStep: 'entry', stepData: {} };
     }
     if (extracted.intent === 'modify' && conversation.currentStep === 'finalized') {
-      await sendText(restaurant, phone, 'Please call the restaurant manager to modify your booking.');
+      await sendText(restaurant, phone, `Please call our manager at ${restaurant.managerPhone || '+919511673214'} to modify your booking.`);
       return { nextStep: 'finalized', stepData };
     }
   }
 
   await sendWelcome(restaurant, phone);
   return { nextStep: 'entry', stepData };
+}
+
+async function cancelUserBooking(phone: string, restaurant: Restaurant, stepData: StepData) {
+  let resCode = stepData.reservationCode;
+
+  // Update in commercial bookings table
+  const clientMatch = await db.select().from(clients).where(eq(clients.slug, restaurant.slug)).limit(1);
+  if (clientMatch.length > 0) {
+    const activeBookings = await db
+      .select()
+      .from(bookings)
+      .where(and(eq(bookings.customerPhone, phone), eq(bookings.clientId, clientMatch[0].id), eq(bookings.status, 'booked')))
+      .orderBy(desc(bookings.createdAt));
+    
+    if (activeBookings.length > 0) {
+      resCode = activeBookings[0].reservationCode || resCode;
+      await db.update(bookings).set({ status: 'cancelled' }).where(eq(bookings.id, activeBookings[0].id));
+    }
+  }
+
+  // Update in legacy reservations table
+  const activeRes = await db
+    .select()
+    .from(reservations)
+    .where(and(eq(reservations.customerPhone, phone), eq(reservations.restaurantId, restaurant.id), eq(reservations.stage, 'booked')))
+    .orderBy(desc(reservations.createdAt));
+  
+  if (activeRes.length > 0) {
+    resCode = activeRes[0].reservationCode || resCode;
+    await db.update(reservations).set({ stage: 'cancelled' }).where(eq(reservations.id, activeRes[0].id));
+  }
+
+  const codeText = resCode ? ` (Code: *${resCode}*)` : '';
+
+  if (restaurant.managerPhone) {
+    await sendText(restaurant, restaurant.managerPhone, `❌ *Reservation Cancelled by Guest*\n\n📱 +${phone}${codeText}`);
+  }
+
+  await sendText(restaurant, phone, `❌ Your table reservation${codeText} has been cancelled.\n\nWe hope to welcome you another time! Tap below anytime to reserve a table in the future. 👇`);
 }
 
 async function sendWelcome(restaurant: Restaurant, phone: string) {
