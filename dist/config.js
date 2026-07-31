@@ -9,6 +9,8 @@ const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
 exports.config = {
     PORT: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
+    tursoDatabaseUrl: process.env.TURSO_DATABASE_URL || '',
+    tursoAuthToken: process.env.TURSO_AUTH_TOKEN || '',
     absoluteDatabasePath: path_1.default.resolve(process.env.DATABASE_PATH || './data/hob-restaurant.db'),
     metaApiBase: 'https://graph.facebook.com/v21.0',
     whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',

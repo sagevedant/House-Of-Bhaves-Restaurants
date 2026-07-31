@@ -44,12 +44,23 @@ const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const config_1 = require("../config");
 const schema = __importStar(require("./schema"));
-const dbDir = path_1.default.dirname(config_1.config.absoluteDatabasePath);
-if (!fs_1.default.existsSync(dbDir)) {
-    fs_1.default.mkdirSync(dbDir, { recursive: true });
+let dbUrl = `file:${config_1.config.absoluteDatabasePath}`;
+let authToken = undefined;
+if (config_1.config.tursoDatabaseUrl) {
+    dbUrl = config_1.config.tursoDatabaseUrl;
+    authToken = config_1.config.tursoAuthToken || undefined;
+    console.log(`🌐 [DATABASE CONNECTED]: Using Turso Cloud SQLite Persistent Storage (${dbUrl})`);
+}
+else {
+    const dbDir = path_1.default.dirname(config_1.config.absoluteDatabasePath);
+    if (!fs_1.default.existsSync(dbDir)) {
+        fs_1.default.mkdirSync(dbDir, { recursive: true });
+    }
+    console.log(`📁 [DATABASE CONNECTED]: Using Local Disk SQLite Storage (${config_1.config.absoluteDatabasePath})`);
 }
 exports.sqlite = (0, client_1.createClient)({
-    url: `file:${config_1.config.absoluteDatabasePath}`
+    url: dbUrl,
+    authToken: authToken
 });
 exports.db = (0, libsql_1.drizzle)(exports.sqlite, { schema });
 async function initializeDatabase() {

@@ -5,13 +5,24 @@ import path from 'path';
 import { config } from '../config';
 import * as schema from './schema';
 
-const dbDir = path.dirname(config.absoluteDatabasePath);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+let dbUrl = `file:${config.absoluteDatabasePath}`;
+let authToken: string | undefined = undefined;
+
+if (config.tursoDatabaseUrl) {
+  dbUrl = config.tursoDatabaseUrl;
+  authToken = config.tursoAuthToken || undefined;
+  console.log(`🌐 [DATABASE CONNECTED]: Using Turso Cloud SQLite Persistent Storage (${dbUrl})`);
+} else {
+  const dbDir = path.dirname(config.absoluteDatabasePath);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+  console.log(`📁 [DATABASE CONNECTED]: Using Local Disk SQLite Storage (${config.absoluteDatabasePath})`);
 }
 
 export const sqlite = createClient({
-  url: `file:${config.absoluteDatabasePath}`
+  url: dbUrl,
+  authToken: authToken
 });
 
 export const db = drizzle(sqlite, { schema });

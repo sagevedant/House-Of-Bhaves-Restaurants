@@ -1,5 +1,7 @@
 export declare const config: {
     PORT: number;
+    tursoDatabaseUrl: string;
+    tursoAuthToken: string;
     absoluteDatabasePath: string;
     metaApiBase: string;
     whatsappPhoneNumberId: string;
