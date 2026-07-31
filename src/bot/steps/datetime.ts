@@ -42,9 +42,9 @@ export async function handleDateTimeDate(
       return { nextStep: 'datetime_date', stepData };
     }
 
-    const slots = getAvailableTimeSlots(date, restaurant.openingHoursLunch || '12:00-15:30', restaurant.openingHoursDinner || '19:00-23:00');
+    const slots = getAvailableTimeSlots(date, restaurant.openingHoursLunch || '', restaurant.openingHoursDinner || '19:00-00:30');
     if (!slots || slots.length === 0 || slots.every(s => s.slots.length === 0)) {
-      await sendText(restaurant, phone, `All slots for ${formatDate(date)} are done for today! How about tomorrow? 🌟`);
+      await sendText(restaurant, phone, `All slots for ${formatDate(date)} are full or closed! How about another day? 🌟`);
       await sendDatePrompt(restaurant, phone);
       return { nextStep: 'datetime_date', stepData };
     }
@@ -59,18 +59,23 @@ export async function handleDateTimeDate(
 }
 
 export async function sendTimePrompt(restaurant: Restaurant, phone: string, date: string) {
-  const slots = getAvailableTimeSlots(date, restaurant.openingHoursLunch || '12:00-15:30', restaurant.openingHoursDinner || '19:00-23:00');
+  const lunchHours = restaurant.openingHoursLunch !== null && restaurant.openingHoursLunch !== undefined ? restaurant.openingHoursLunch : '';
+  const dinnerHours = restaurant.openingHoursDinner || '19:00-00:30';
+
+  const slots = getAvailableTimeSlots(date, lunchHours, dinnerHours);
   const sections = slots.filter(s => s.slots.length > 0).map(s => ({
-    title: `${s.period === 'Lunch' ? '🌞 Lunch' : '🌙 Dinner'} service`,
+    title: s.period === 'Lunch' ? '🌞 Lunch (Afternoon)' : '🌙 Dinner (Evening)',
     rows: s.slots.map(slot => ({
       id: `time_${slot.replace(':', '_')}`,
       title: formatTime(slot),
-      description: `${s.period === 'Lunch' ? '🌞 Lunch' : '🌙 Dinner'} service`
+      description: s.period === 'Lunch' ? 'Afternoon Slot (Lunch)' : 'Evening Slot (Dinner)'
     }))
   }));
   
   if (sections.length > 0) {
-    await sendList(restaurant, phone, '🕐 Pick your preferred time slot:', 'Select Time', sections);
+    await sendList(restaurant, phone, '🕐 Select your time slot [Afternoon (Lunch) or Evening (Dinner)]:', 'Select Time Slot', sections);
+  } else {
+    await sendText(restaurant, phone, `No available slots for ${formatDate(date)}. Please select another day!`);
   }
 }
 

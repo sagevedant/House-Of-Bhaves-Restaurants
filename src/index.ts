@@ -273,7 +273,7 @@ app.get('/onboard', (req, res) => {
     <div class="form-header">
       <div class="brand-pill">House of Bhaves Agency</div>
       <h1>🍽️ Onboard Restaurant Client</h1>
-      <p>Configure WhatsApp Credentials, Custom Greeting, Cuisines & Seating Setup</p>
+      <p>Configure Custom Greetings, Operating Hours, Cuisines & Seating Setup</p>
     </div>
 
     <form action="/api/agency/onboard" method="POST">
@@ -298,6 +298,17 @@ app.get('/onboard', (req, res) => {
         </div>
       </div>
 
+      <div class="row-2">
+        <div class="form-group">
+          <label>Lunch Hours (Afternoon)</label>
+          <input type="text" name="openingHoursLunch" placeholder="e.g. 12:00-15:30 (leave blank if closed lunch)">
+        </div>
+        <div class="form-group">
+          <label>Dinner Hours (Evening)</label>
+          <input type="text" name="openingHoursDinner" placeholder="e.g. 19:00-00:30 (Evening post 7 PM)">
+        </div>
+      </div>
+
       <div class="form-group">
         <label>Custom Bot Welcome Greeting (Optional)</label>
         <textarea name="customWelcomeText" placeholder="e.g. Welcome to Big Bang Community (BBC)! Relaxed outdoor seating, live music & sports screenings. Tap below to book your table!"></textarea>
@@ -315,8 +326,8 @@ app.get('/onboard', (req, res) => {
 
       <div class="row-2">
         <div class="form-group">
-          <label>Meta WhatsApp Phone Number ID *</label>
-          <input type="text" name="whatsappPhoneNumberId" placeholder="e.g. 1167895203082852" required>
+          <label>Meta WhatsApp Phone Number ID (Optional)</label>
+          <input type="text" name="whatsappPhoneNumberId" placeholder="Auto-fills agency default ID if blank">
         </div>
 
         <div class="form-group">
@@ -326,8 +337,8 @@ app.get('/onboard', (req, res) => {
       </div>
 
       <div class="form-group">
-        <label>Meta Permanent Access Token *</label>
-        <input type="text" name="metaAccessToken" placeholder="e.g. EAA4bXmG..." required>
+        <label>Meta Permanent Access Token (Optional)</label>
+        <input type="text" name="metaAccessToken" placeholder="Auto-fills agency system token if blank">
       </div>
 
       <div class="row-2">
@@ -364,11 +375,13 @@ app.post('/api/agency/onboard', async (req, res) => {
       managerPhone,
       googleReviewUrl,
       customWelcomeText,
-      customMenuText
+      customMenuText,
+      openingHoursLunch,
+      openingHoursDinner
     } = req.body;
 
-    if (!businessName || !slug || !whatsappPhoneNumberId || !metaAccessToken) {
-      return res.status(400).send('Missing required fields: businessName, slug, whatsappPhoneNumberId, metaAccessToken');
+    if (!businessName || !slug) {
+      return res.status(400).send('Missing required fields: businessName, slug');
     }
 
     const cleanSlug = slug.toLowerCase().trim().replace(/[^a-z0-9-]/g, '-');
@@ -376,6 +389,9 @@ app.post('/api/agency/onboard', async (req, res) => {
     const nextResetObj = new Date();
     nextResetObj.setDate(today.getDate() + 30);
     const nextResetDate = nextResetObj.toISOString().split('T')[0];
+
+    const phoneId = (whatsappPhoneNumberId && whatsappPhoneNumberId.trim()) ? whatsappPhoneNumberId.trim() : (config.whatsappPhoneNumberId || '1167895203082852');
+    const token = (metaAccessToken && metaAccessToken.trim()) ? metaAccessToken.trim() : (config.metaAccessToken || 'PLACEHOLDER_TOKEN');
 
     // Insert into clients table
     await db.insert(clients).values({
@@ -385,8 +401,8 @@ app.post('/api/agency/onboard', async (req, res) => {
       outboundAllowanceMonthly: 1000,
       outboundSentThisMonth: 0,
       nextMonthlyResetDate: nextResetDate,
-      whatsappPhoneNumberId,
-      metaAccessToken,
+      whatsappPhoneNumberId: phoneId,
+      metaAccessToken: token,
       prefix: prefix || 'HOB',
       googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
       customWelcomeText: customWelcomeText || null,
@@ -399,10 +415,12 @@ app.post('/api/agency/onboard', async (req, res) => {
       name: businessName,
       slug: cleanSlug,
       address: address || 'Pune',
-      whatsappPhoneNumberId,
-      metaAccessToken,
+      whatsappPhoneNumberId: phoneId,
+      metaAccessToken: token,
       prefix: prefix || 'HOB',
-      managerPhone: managerPhone || '919699533441',
+      managerPhone: managerPhone || '919511673214',
+      openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '',
+      openingHoursDinner: openingHoursDinner || '19:00-00:30',
       googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
       customWelcomeText: customWelcomeText || null,
       customMenuText: customMenuText || null,

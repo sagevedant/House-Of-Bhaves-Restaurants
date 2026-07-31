@@ -111,7 +111,6 @@ async function seedDatabase() {
             .from(schema_1.restaurants)
             .where((0, drizzle_orm_1.eq)(schema_1.restaurants.prefix, 'HOB'))
             .get();
-        let restaurantId = existing?.id;
         if (!existing) {
             const [inserted] = await connection_1.db.insert(schema_1.restaurants).values({
                 name: 'House of Bhaves Rooftop & Lounge (HOB)',
@@ -128,7 +127,6 @@ async function seedDatabase() {
                 googleReviewUrl: 'https://maps.google.com',
                 active: true,
             }).returning();
-            restaurantId = inserted.id;
             console.log('✅ Seed: Inserted House of Bhaves (HOB) restaurant.');
         }
         else {
@@ -144,11 +142,11 @@ async function seedDatabase() {
             }
             await connection_1.db.update(schema_1.restaurants).set(updates).where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, existing.id));
         }
-        // Also ensure BBC exists in restaurants table
+        // Ensure BBC exists in restaurants table (Evening post 7 PM ONLY)
+        const bbcWelcome = `🌟 Welcome to Big Bang Community (BBC)!\n\nRelaxed outdoor seating, live music, sports screenings & delicious homestyle rice & pasta meals, dumplings & chicken!\n\nTap below to reserve your table instantly! 👇`;
+        const bbcMenu = `🍽️ *Big Bang Community (BBC) — Menu & Specials* 🌟\n\n🥟 *Dumplings & Dim Sums*\n• Steamed Veg & Chicken Dumplings 🥟\n• Chilli Garlic Fried Dim Sums 🥟\n\n🍝 *Homestyle Rice & Pastas*\n• Creamy Alfredo & Arrabbiata Pasta 🍝\n• BBC Special Peri Peri Chicken Rice Bowl 🍚\n\n🍗 *Crispy Chicken & Bites*\n• Signature Korean Fried Chicken 🍗\n• Crunchy Wings Platter 🍗\n\n🍹 *Craft Drinks & Brews*\n• Cold Brew Shakerato & Tropical Fruit Punch 🍹\n\n✨ *Vibe & Amenities*: Outdoor Seating 🍃 • Live Music 🎵 • Live Sports Screening 📺`;
         const existingBbcRest = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.prefix, 'BBC')).get();
         if (!existingBbcRest) {
-            const bbcWelcome = `🌟 Welcome to Big Bang Community (BBC)!\n\nRelaxed outdoor seating, live music, sports screenings & delicious homestyle rice & pasta meals, dumplings & chicken!\n\nTap below to reserve your table instantly! 👇`;
-            const bbcMenu = `🍽️ *Big Bang Community (BBC) — Menu & Specials* 🌟\n\n🥟 *Dumplings & Dim Sums*\n• Steamed Veg & Chicken Dumplings 🥟\n• Chilli Garlic Fried Dim Sums 🥟\n\n🍝 *Homestyle Rice & Pastas*\n• Creamy Alfredo & Arrabbiata Pasta 🍝\n• BBC Special Peri Peri Chicken Rice Bowl 🍚\n\n🍗 *Crispy Chicken & Bites*\n• Signature Korean Fried Chicken 🍗\n• Crunchy Wings Platter 🍗\n\n🍹 *Craft Drinks & Brews*\n• Cold Brew Shakerato & Tropical Fruit Punch 🍹\n\n✨ *Vibe & Amenities*: Outdoor Seating 🍃 • Live Music 🎵 • Live Sports Screening 📺`;
             await connection_1.db.insert(schema_1.restaurants).values({
                 name: 'Big Bang Community (BBC)',
                 slug: 'big-bang-community',
@@ -157,8 +155,8 @@ async function seedDatabase() {
                 metaAccessToken: config_1.config.metaAccessToken || 'PLACEHOLDER_TOKEN',
                 prefix: 'BBC',
                 managerPhone: '919511673214',
-                openingHoursLunch: '12:00-16:00',
-                openingHoursDinner: '18:00-00:30',
+                openingHoursLunch: '', // Closed for Lunch
+                openingHoursDinner: '19:00-00:30', // Evening post 7 PM only
                 closedDays: '',
                 maxPaxNormal: 12,
                 googleReviewUrl: 'https://maps.google.com/?q=Big+Bang+Community+Pune',
@@ -167,6 +165,15 @@ async function seedDatabase() {
                 active: true,
             });
             console.log('✅ Seed: Inserted Big Bang Community (BBC) restaurant.');
+        }
+        else {
+            await connection_1.db.update(schema_1.restaurants).set({
+                openingHoursLunch: '', // Closed for Lunch
+                openingHoursDinner: '19:00-00:30', // Evening post 7 PM only
+                customWelcomeText: bbcWelcome,
+                customMenuText: bbcMenu,
+            }).where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, existingBbcRest.id));
+            console.log('✅ Seed: Updated BBC operating hours to Evening post 7 PM only.');
         }
     }
     catch (error) {
