@@ -12,7 +12,7 @@ export const clients = sqliteTable('clients', {
   outboundAllowanceMonthly: integer('outbound_allowance_monthly').default(1000),
   outboundSentThisMonth: integer('outbound_sent_this_month').default(0),
   nextMonthlyResetDate: text('next_monthly_reset_date'), // YYYY-MM-DD
-  whatsappPhoneNumberId: text('whatsapp_phone_number_id').notNull().unique(),
+  whatsappPhoneNumberId: text('whatsapp_phone_number_id').notNull(),
   metaAccessToken: text('meta_access_token').notNull(),
   prefix: text('prefix').notNull().default('HOB'),
   googleReviewUrl: text('google_review_url').default('https://maps.google.com'),
@@ -71,7 +71,7 @@ export const restaurants = sqliteTable('restaurants', {
   name: text('name').notNull(),
   slug: text('slug').notNull().default('hob-restaurant'),
   address: text('address').notNull(),
-  whatsappPhoneNumberId: text('whatsapp_phone_number_id').notNull().unique(),
+  whatsappPhoneNumberId: text('whatsapp_phone_number_id').notNull(),
   metaAccessToken: text('meta_access_token').notNull(),
   prefix: text('prefix').notNull(),
   managerPhone: text('manager_phone'),

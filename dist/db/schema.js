@@ -13,7 +13,7 @@ exports.clients = (0, sqlite_core_1.sqliteTable)('clients', {
     outboundAllowanceMonthly: (0, sqlite_core_1.integer)('outbound_allowance_monthly').default(1000),
     outboundSentThisMonth: (0, sqlite_core_1.integer)('outbound_sent_this_month').default(0),
     nextMonthlyResetDate: (0, sqlite_core_1.text)('next_monthly_reset_date'), // YYYY-MM-DD
-    whatsappPhoneNumberId: (0, sqlite_core_1.text)('whatsapp_phone_number_id').notNull().unique(),
+    whatsappPhoneNumberId: (0, sqlite_core_1.text)('whatsapp_phone_number_id').notNull(),
     metaAccessToken: (0, sqlite_core_1.text)('meta_access_token').notNull(),
     prefix: (0, sqlite_core_1.text)('prefix').notNull().default('HOB'),
     googleReviewUrl: (0, sqlite_core_1.text)('google_review_url').default('https://maps.google.com'),
@@ -68,7 +68,7 @@ exports.restaurants = (0, sqlite_core_1.sqliteTable)('restaurants', {
     name: (0, sqlite_core_1.text)('name').notNull(),
     slug: (0, sqlite_core_1.text)('slug').notNull().default('hob-restaurant'),
     address: (0, sqlite_core_1.text)('address').notNull(),
-    whatsappPhoneNumberId: (0, sqlite_core_1.text)('whatsapp_phone_number_id').notNull().unique(),
+    whatsappPhoneNumberId: (0, sqlite_core_1.text)('whatsapp_phone_number_id').notNull(),
     metaAccessToken: (0, sqlite_core_1.text)('meta_access_token').notNull(),
     prefix: (0, sqlite_core_1.text)('prefix').notNull(),
     managerPhone: (0, sqlite_core_1.text)('manager_phone'),
