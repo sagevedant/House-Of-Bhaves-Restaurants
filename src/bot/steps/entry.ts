@@ -22,12 +22,16 @@ export async function handleEntry(
       ]);
       return { nextStep: 'guests', stepData };
     }
-    if (event.buttonId === 'view_menu') {
-      await sendText(restaurant, phone, '📋 Here is our menu link: https://spicefactory.com/menu');
+    if (event.buttonId === 'view_menu' || event.buttonId === 'view_cuisines') {
+      const menuTxt = `🍽️ *${restaurant.name} — Curated Cuisines & Chef Specials* 🌟\n\n🔥 *North Indian & Tandoor*\n• Butter Chicken & Garlic Naan 🧈\n• Dal Makhani & Dal Bukhara 🍲\n• Paneer Tikka & Galouti Kebab 🍢\n\n🥟 *Asian & Dim Sum*\n• Truffle Edamame Dim Sums 🥟\n• Spicy Asian Basil Rice 🍚\n• Crunchy Lotus Stem in Honey Chilli 🥢\n\n🍕 *Continental & Wood-Fired*\n• Truffle Mushroom Wood-Fired Pizza 🍕\n• Creamy Tuscan Pasta 🍝\n• Artisan Cheese Platter 🧀\n\n🍹 *Craft Cocktails & Desserts*\n• Smoked Old Fashioned & Elderflower Spritz 🍸\n• Sizzling Walnut Brownie with Gelato 🍨\n\nWould you like to reserve a table to taste our specials tonight? 👇`;
+      await sendButtons(restaurant, phone, menuTxt, [
+        { id: 'book_table', title: 'Book a Table 🍽️' },
+        { id: 'talk_to_us', title: 'Talk to Us 💬' },
+      ], `📋 Cuisines & Specials`);
       return { nextStep: 'entry', stepData };
     }
     if (event.buttonId === 'talk_to_us') {
-      await sendText(restaurant, phone, `📞 You can reach our manager at ${restaurant.managerPhone || '+123456789'}.`);
+      await sendText(restaurant, phone, `📞 You can reach our manager at ${restaurant.managerPhone || '+919699533441'}.`);
       return { nextStep: 'entry', stepData };
     }
     if (event.buttonId === 'new_booking') {
@@ -39,7 +43,7 @@ export async function handleEntry(
       return { nextStep: 'guests', stepData: {} };
     }
     if (event.buttonId === 'modify_booking') {
-      await sendText(restaurant, phone, 'Please call the restaurant to modify your booking.');
+      await sendText(restaurant, phone, 'Please call the restaurant manager to modify your booking.');
       return { nextStep: 'finalized', stepData };
     }
     if (event.buttonId === 'cancel_booking') {
@@ -111,7 +115,7 @@ export async function handleEntry(
       return { nextStep: 'finalized', stepData };
     }
     if (extracted.intent === 'modify' && conversation.currentStep === 'finalized') {
-      await sendText(restaurant, phone, 'Please call the restaurant to modify your booking.');
+      await sendText(restaurant, phone, 'Please call the restaurant manager to modify your booking.');
       return { nextStep: 'finalized', stepData };
     }
   }
@@ -122,12 +126,12 @@ export async function handleEntry(
 
 async function sendWelcome(restaurant: Restaurant, phone: string) {
   await sendButtons(restaurant, phone,
-    '🍽️ Welcome to Spice Factory Rooftop & Lounge!\n\nWhether it\'s a cozy dinner, a birthday celebration, or an evening under the stars — we\'ve got the perfect table for you.\n\nTap below to reserve your table instantly! 👇',
+    `🍽️ Welcome to ${restaurant.name}!\n\nWhether it's a cozy dinner, a birthday celebration, or an evening under the stars — we've got the perfect table for you.\n\nTap below to reserve your table instantly! 👇`,
     [
       { id: 'book_table', title: 'Book a Table 🍽️' },
-      { id: 'view_menu', title: 'Our Menu 📋' },
+      { id: 'view_menu', title: 'Cuisines & Specials 📋' },
       { id: 'talk_to_us', title: 'Talk to Us 💬' },
     ],
-    '🍽️ Spice Factory'
+    `🍽️ ${restaurant.name}`
   );
 }

@@ -251,13 +251,29 @@ app.get('/onboard', (req, res) => {
     }
     .submit-btn:hover { background: #D97706; }
     .note { font-size: 12px; color: #78716C; margin-top: 6px; }
+    .pricing-box {
+      background: #11100E;
+      border: 1px dashed #F59E0B;
+      padding: 14px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .pricing-box strong { color: #F59E0B; }
   </style>
 </head>
 <body>
   <div class="form-container">
     <div class="form-header">
       <h1>🍽️ Onboard New Restaurant Client</h1>
-      <p>Configure WhatsApp Credentials, Custom URL Slug & Subscription Tier</p>
+      <p>Configure WhatsApp Credentials, Custom URL Slug & Itemized Commercial Offer</p>
+    </div>
+
+    <div class="pricing-box">
+      💰 <strong>Itemized Commercial Plan Breakdown:</strong><br>
+      • <strong>Core Automation Package:</strong> ₹9,999/mo (Unlimited Inbound Booking Bot + Same-Day Reviews)<br>
+      • <strong>Outbound Marketing Add-on:</strong> +₹5,000/mo (Monthly Plan) OR +₹9,999/qtr (Quarterly Bundle - Save ₹5,001). Capped at 1,000 msgs/mo.
     </div>
 
     <form action="/api/agency/onboard" method="POST">
@@ -274,10 +290,10 @@ app.get('/onboard', (req, res) => {
         </div>
 
         <div class="form-group">
-          <label>Subscription Tier *</label>
+          <label>Commercial Billing Option *</label>
           <select name="billingCycle" required>
-            <option value="monthly">Tier 1: Monthly (₹14,999/mo)</option>
-            <option value="quarterly" selected>Tier 2: Quarterly Bundle (₹39,996 upfront)</option>
+            <option value="monthly">Monthly Option: ₹9,999 Base + ₹5,000 Outbound (₹14,999/mo)</option>
+            <option value="quarterly" selected>Quarterly Bundle: ₹29,997 Base + ₹9,999 Outbound (₹39,996/qtr)</option>
           </select>
         </div>
       </div>
@@ -398,8 +414,10 @@ app.get('/agency', async (req, res) => {
     const tier1Count = clientList.filter(c => c.billingCycle === 'monthly').length;
     const tier2Count = clientList.filter(c => c.billingCycle === 'quarterly').length;
 
-    // Monthly Recurring Revenue (MRR): Monthly ₹14,999 + Quarterly (₹39,996 / 3 = ₹13,332/mo)
-    const mrr = (tier1Count * 14999) + (tier2Count * 13332);
+    // Itemized MRR Calculation:
+    // Core Engine = ₹9,999/mo per client
+    // Outbound Add-on: Monthly = ₹5,000/mo | Quarterly = ₹9,999/3 = ₹3,333/mo
+    const mrr = (activeClientsCount * 9999) + (tier1Count * 5000) + (tier2Count * 3333);
     
     let totalOutboundSent = 0;
     clientList.forEach(c => totalOutboundSent += (c.outboundSentThisMonth || 0));
@@ -418,7 +436,7 @@ app.get('/agency', async (req, res) => {
       const isQuotaFull = sent >= maxQuota;
       
       const metaExpense = (sent * 1.02).toFixed(2);
-      const tierPrice = c.billingCycle === 'quarterly' ? '₹39,996 / qtr' : '₹14,999 / mo';
+      const tierPrice = c.billingCycle === 'quarterly' ? 'Quarterly: ₹29,997 Base + ₹9,999 Add-on' : 'Monthly: ₹9,999 Base + ₹5,000 Add-on';
       const tierBadgeClass = c.billingCycle === 'quarterly' ? 'tier-quarterly' : 'tier-monthly';
 
       return `
@@ -428,7 +446,8 @@ app.get('/agency', async (req, res) => {
             <div class="client-slug">Slug: /restaurant/${c.slug}</div>
           </td>
           <td>
-            <span class="tier-badge ${tierBadgeClass}">${(c.billingCycle || 'monthly').toUpperCase()} (${tierPrice})</span>
+            <span class="tier-badge ${tierBadgeClass}">${(c.billingCycle || 'monthly').toUpperCase()}</span>
+            <div style="font-size:11px; color:#A8A29E; margin-top:4px;">${tierPrice}</div>
           </td>
           <td>
             <div class="quota-meter-container">
@@ -623,7 +642,7 @@ app.get('/agency', async (req, res) => {
     <div class="header-banner">
       <div class="agency-title">
         <h1>🍽️ Restaurant Agency Operations Master</h1>
-        <p>Commercial Accounts & Meta API Cost Ledger • House of Bhaves</p>
+        <p>Itemized Commercial Accounts & Meta API Cost Ledger • House of Bhaves</p>
       </div>
       <div class="header-right-btns">
         <a href="/onboard" class="btn-onboard">➕ Onboard New Restaurant</a>
@@ -668,7 +687,7 @@ app.get('/agency', async (req, res) => {
         <thead>
           <tr>
             <th>Restaurant Client</th>
-            <th>Subscription Tier</th>
+            <th>Itemized Subscription Breakdown</th>
             <th>Monthly Outbound Quota (1,000 Cap)</th>
             <th>Reset Schedule</th>
             <th>Meta API Out-of-Pocket</th>
