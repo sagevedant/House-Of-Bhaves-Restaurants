@@ -65,15 +65,14 @@ async function sendTimePrompt(restaurant, phone, date) {
     const dinnerHours = restaurant.openingHoursDinner || '19:00-00:30';
     const slots = (0, dateHelpers_1.getAvailableTimeSlots)(date, lunchHours, dinnerHours);
     const sections = slots.filter(s => s.slots.length > 0).map(s => ({
-        title: s.period === 'Lunch' ? '🌞 Lunch (Afternoon)' : '🌙 Dinner (Evening)',
+        title: s.period === 'Lunch' ? '🌞 Lunch Service' : '🌙 Dinner Service',
         rows: s.slots.map(slot => ({
             id: `time_${slot.replace(':', '_')}`,
-            title: (0, dateHelpers_1.formatTime)(slot),
-            description: s.period === 'Lunch' ? 'Afternoon Slot (Lunch)' : 'Evening Slot (Dinner)'
+            title: (0, dateHelpers_1.formatTime)(slot)
         }))
     }));
     if (sections.length > 0) {
-        await (0, sender_1.sendList)(restaurant, phone, '🕐 Select your time slot [Afternoon (Lunch) or Evening (Dinner)]:', 'Select Time Slot', sections);
+        await (0, sender_1.sendList)(restaurant, phone, '🕐 Select your preferred time slot:', 'Select Time', sections);
     }
     else {
         await (0, sender_1.sendText)(restaurant, phone, `No available slots for ${(0, dateHelpers_1.formatDate)(date)}. Please select another day!`);
