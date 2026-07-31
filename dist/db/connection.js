@@ -53,11 +53,66 @@ exports.sqlite = (0, client_1.createClient)({
 });
 exports.db = (0, libsql_1.drizzle)(exports.sqlite, { schema });
 async function initializeDatabase() {
+    // Commercial Agency Tables
+    await exports.sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS clients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      business_name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      billing_cycle TEXT DEFAULT 'monthly',
+      outbound_allowance_monthly INTEGER DEFAULT 1000,
+      outbound_sent_this_month INTEGER DEFAULT 0,
+      next_monthly_reset_date TEXT,
+      whatsapp_phone_number_id TEXT NOT NULL UNIQUE,
+      meta_access_token TEXT NOT NULL,
+      prefix TEXT DEFAULT 'HOB',
+      google_review_url TEXT DEFAULT 'https://maps.google.com',
+      active INTEGER DEFAULT 1
+    )
+  `);
+    await exports.sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER NOT NULL REFERENCES clients(id),
+      phone_number TEXT NOT NULL,
+      customer_name TEXT,
+      birthday TEXT,
+      anniversary TEXT,
+      last_inbound_interaction TEXT,
+      birthday_discount_claimed_year INTEGER,
+      last_dined_at TEXT,
+      updated_at TEXT
+    )
+  `);
+    await exports.sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS bookings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER NOT NULL REFERENCES clients(id),
+      customer_id INTEGER REFERENCES customers(id),
+      customer_name TEXT,
+      customer_phone TEXT NOT NULL,
+      guests INTEGER NOT NULL DEFAULT 2,
+      occasion TEXT DEFAULT 'casual',
+      booking_timestamp TEXT,
+      date TEXT NOT NULL,
+      time TEXT NOT NULL,
+      reservation_code TEXT UNIQUE,
+      status TEXT DEFAULT 'booked',
+      special_request TEXT,
+      review_sent INTEGER DEFAULT 0,
+      review_scheduled_at TEXT,
+      created_at TEXT
+    )
+  `);
+    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_customers_phone_client ON customers(phone_number, client_id)`);
+    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)`);
+    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date)`);
+    // Single Restaurant / Legacy Tables
     await exports.sqlite.execute(`
     CREATE TABLE IF NOT EXISTS restaurants (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
-      slug TEXT NOT NULL DEFAULT 'spice-factory',
+      slug TEXT NOT NULL DEFAULT 'hob-restaurant',
       address TEXT NOT NULL,
       whatsapp_phone_number_id TEXT NOT NULL UNIQUE,
       meta_access_token TEXT NOT NULL,
@@ -105,25 +160,29 @@ async function initializeDatabase() {
     await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_conversations_phone_restaurant ON conversations(phone, restaurant_id)`);
     await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_reservations_stage ON reservations(stage)`);
     await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_reservations_date ON reservations(date)`);
-    // Safe migration helpers for existing SQLite DBs
+    // Safe Migration Alter Helpers
     try {
-        await exports.sqlite.execute(`ALTER TABLE restaurants ADD COLUMN slug TEXT DEFAULT 'spice-factory';`);
+        await exports.sqlite.execute(`ALTER TABLE clients ADD COLUMN billing_cycle TEXT DEFAULT 'monthly';`);
     }
     catch { }
     try {
-        await exports.sqlite.execute(`ALTER TABLE restaurants ADD COLUMN google_review_url TEXT DEFAULT 'https://maps.google.com';`);
+        await exports.sqlite.execute(`ALTER TABLE clients ADD COLUMN outbound_allowance_monthly INTEGER DEFAULT 1000;`);
     }
     catch { }
     try {
-        await exports.sqlite.execute(`ALTER TABLE conversations ADD COLUMN birthday_discount_claimed_year INTEGER;`);
+        await exports.sqlite.execute(`ALTER TABLE clients ADD COLUMN outbound_sent_this_month INTEGER DEFAULT 0;`);
     }
     catch { }
     try {
-        await exports.sqlite.execute(`ALTER TABLE conversations ADD COLUMN last_dined_at TEXT;`);
+        await exports.sqlite.execute(`ALTER TABLE clients ADD COLUMN next_monthly_reset_date TEXT;`);
     }
     catch { }
     try {
-        await exports.sqlite.execute(`ALTER TABLE reservations ADD COLUMN review_sent INTEGER DEFAULT 0;`);
+        await exports.sqlite.execute(`ALTER TABLE customers ADD COLUMN last_inbound_interaction TEXT;`);
+    }
+    catch { }
+    try {
+        await exports.sqlite.execute(`ALTER TABLE bookings ADD COLUMN review_scheduled_at TEXT;`);
     }
     catch { }
     await exports.sqlite.execute(`PRAGMA journal_mode = WAL`);

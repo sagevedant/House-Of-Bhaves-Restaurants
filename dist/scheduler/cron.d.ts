@@ -1,9 +1,10 @@
 /**
- * 🎂 Birthday 7-Day Pre-Push Cron
- * Runs daily at 9:00 AM IST
+ * 🎂 Birthday & Anniversary Daily Outbound Marketing Engine (10:00 AM IST)
+ * Includes Smart Cut-Off System (1,000 quota limit) and Counter Increment
  */
 export declare function runBirthdayPushCron(): Promise<{
     sentCount: number;
+    haltedCount: number;
 }>;
 /**
  * 🔄 30-Day Retention Nudge ("We Miss You")
@@ -13,8 +14,8 @@ export declare function runRetentionCron(): Promise<{
     sentCount: number;
 }>;
 /**
- * 🌅 Morning-After 14-Hour Google Review Request
- * Runs hourly
+ * 🌅 Morning-After & Same-Day 2-Hour Review Queue Processor
+ * Runs every 10 minutes
  */
 export declare function runReviewRequestCron(): Promise<{
     sentCount: number;

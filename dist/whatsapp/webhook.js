@@ -4,6 +4,9 @@ const express_1 = require("express");
 const config_1 = require("../config");
 const parser_1 = require("./parser");
 const router_1 = require("../bot/router");
+const connection_1 = require("../db/connection");
+const schema_1 = require("../db/schema");
+const drizzle_orm_1 = require("drizzle-orm");
 const router = (0, express_1.Router)();
 router.get('/', (req, res) => {
     const mode = req.query['hub.mode'];
@@ -33,6 +36,26 @@ router.post('/', (req, res) => {
                 for (const event of webhook.events) {
                     try {
                         console.log(`⚡ [HANDLING EVENT]:`, JSON.stringify(event, null, 2));
+                        // Record 24-hour Free Customer Service Window timestamp
+                        if ('from' in event && event.from) {
+                            const nowIso = new Date().toISOString();
+                            try {
+                                const existingCustomer = await connection_1.db
+                                    .select()
+                                    .from(schema_1.customers)
+                                    .where((0, drizzle_orm_1.eq)(schema_1.customers.phoneNumber, event.from))
+                                    .limit(1);
+                                if (existingCustomer.length > 0) {
+                                    await connection_1.db
+                                        .update(schema_1.customers)
+                                        .set({ lastInboundInteraction: nowIso, updatedAt: nowIso })
+                                        .where((0, drizzle_orm_1.eq)(schema_1.customers.id, existingCustomer[0].id));
+                                }
+                            }
+                            catch (err) {
+                                // Non-critical background timestamp update
+                            }
+                        }
                         await (0, router_1.handleIncomingEvent)(webhook.phoneNumberId, event);
                     }
                     catch (e) {

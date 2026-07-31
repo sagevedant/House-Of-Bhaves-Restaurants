@@ -12,61 +12,99 @@ const connection_1 = require("../db/connection");
 const schema_1 = require("../db/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const sender_1 = require("../whatsapp/sender");
-const makeIntegration_1 = require("../services/makeIntegration");
 const dateHelpers_1 = require("../utils/dateHelpers");
+const quotaService_1 = require("../services/quotaService");
+const reviewEngine_1 = require("../services/reviewEngine");
 /**
- * 🎂 Birthday 7-Day Pre-Push Cron
- * Runs daily at 9:00 AM IST
+ * 🎂 Birthday & Anniversary Daily Outbound Marketing Engine (10:00 AM IST)
+ * Includes Smart Cut-Off System (1,000 quota limit) and Counter Increment
  */
 async function runBirthdayPushCron() {
-    console.log('⏰ [Cron] Running 7-Day Birthday Outbound Push...');
+    console.log('⏰ [Cron] Running Daily 10:00 AM Outbound Marketing Engine...');
     const currentYear = new Date().getFullYear();
-    // Get date 7 days from today in YYYY-MM-DD
+    // Get date in MM-DD format for matching
     const targetDateObj = (0, dateHelpers_1.nowIST)();
     targetDateObj.setDate(targetDateObj.getDate() + 7);
-    const targetDate = targetDateObj.toISOString().split('T')[0];
+    const mm = String(targetDateObj.getMonth() + 1).padStart(2, '0');
+    const dd = String(targetDateObj.getDate()).padStart(2, '0');
+    const mmddTarget = `${mm}-${dd}`;
+    const targetDateYmd = targetDateObj.toISOString().split('T')[0];
     let sentCount = 0;
+    let haltedCount = 0;
     try {
+        const allClients = await connection_1.db.select().from(schema_1.clients);
+        for (const client of allClients) {
+            // Quota Verification Check: Smart Cut-Off System
+            const quotaState = await (0, quotaService_1.checkOutboundQuota)(client.id);
+            if (!quotaState.allowed) {
+                console.warn(`🛑 [Cron Smart Cut-Off] Halting marketing outbounds for '${client.businessName}'. Quota reached (${quotaState.sentThisMonth}/${quotaState.monthlyAllowance}).`);
+                haltedCount++;
+                continue;
+            }
+            // Query customers with matching birthday / anniversary
+            const matchedCustomers = await connection_1.db
+                .select()
+                .from(schema_1.customers)
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.customers.clientId, client.id), (0, drizzle_orm_1.eq)(schema_1.customers.birthday, mmddTarget)));
+            for (const cust of matchedCustomers) {
+                if (cust.birthdayDiscountClaimedYear === currentYear) {
+                    console.log(`🛡️ [Guardrail] Guest ${cust.phoneNumber} already claimed 2026 birthday offer. Skipping.`);
+                    continue;
+                }
+                // Re-check quota before each send
+                const currentQuota = await (0, quotaService_1.checkOutboundQuota)(client.id);
+                if (!currentQuota.allowed) {
+                    console.warn(`🛑 [Cron Smart Cut-Off Mid-Batch] Quota limit reached for ${client.businessName}. Halting batch.`);
+                    haltedCount++;
+                    break;
+                }
+                const name = cust.customerName || 'Guest';
+                // Adapt client to Restaurant type structure
+                const dummyRestaurant = {
+                    name: client.businessName,
+                    whatsappPhoneNumberId: client.whatsappPhoneNumberId,
+                    metaAccessToken: client.metaAccessToken,
+                };
+                // Format Meta Structured Template Payload (or button fallback)
+                const msg = `🎂 *Happy Birthday Month, ${name}!*\n\nYour birthday is coming up soon! 🥂\n\nCelebrate at *${client.businessName}* and get a *complimentary Chef's Special Dessert & Candle Setup* on us!\n\nTap below to claim your birthday table:`;
+                await (0, sender_1.sendButtons)(dummyRestaurant, cust.phoneNumber, msg, [
+                    { id: 'book_table', title: 'Claim Birthday Offer 🎂' }
+                ], `🎂 ${client.businessName}`);
+                // Counter Increment on successful transmission
+                await (0, quotaService_1.incrementOutboundCounter)(client.id);
+                sentCount++;
+            }
+        }
+        // Also process single-restaurant reservations for backward compatibility
         const allRestaurants = await connection_1.db.select().from(schema_1.restaurants);
         for (const restaurant of allRestaurants) {
-            // Find birthday reservations matching target date 7 days out
             const bdayReservations = await connection_1.db
                 .select()
                 .from(schema_1.reservations)
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.reservations.restaurantId, restaurant.id), (0, drizzle_orm_1.eq)(schema_1.reservations.occasion, 'birthday'), (0, drizzle_orm_1.eq)(schema_1.reservations.date, targetDate)));
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.reservations.restaurantId, restaurant.id), (0, drizzle_orm_1.eq)(schema_1.reservations.occasion, 'birthday'), (0, drizzle_orm_1.eq)(schema_1.reservations.date, targetDateYmd)));
             for (const res of bdayReservations) {
-                // Check Once-Per-Year Guardrail: check conversation record
                 const convResult = await connection_1.db
                     .select()
                     .from(schema_1.conversations)
                     .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.conversations.phone, res.customerPhone), (0, drizzle_orm_1.eq)(schema_1.conversations.restaurantId, restaurant.id)))
                     .limit(1);
                 const conv = convResult[0];
-                if (conv && conv.birthdayDiscountClaimedYear === currentYear) {
-                    console.log(`🛡️ [Guardrail] Guest ${res.customerPhone} already claimed 2026 birthday offer. Skipping.`);
+                if (conv && conv.birthdayDiscountClaimedYear === currentYear)
                     continue;
-                }
                 const name = res.customerName || 'Guest';
                 const msg = `🎂 *Happy Birthday Month, ${name}!*\n\nYour birthday is coming up on ${(0, dateHelpers_1.formatDate)(res.date)}! 🥂\n\nCelebrate at *${restaurant.name}* and get a *complimentary Chef's Special Dessert & Candle Setup* on us!\n\nTap below to claim your birthday table:`;
                 await (0, sender_1.sendButtons)(restaurant, res.customerPhone, msg, [
                     { id: 'book_table', title: 'Claim Birthday Offer 🎂' }
                 ], `🎂 ${restaurant.name}`);
-                await (0, makeIntegration_1.sendToMakeWebhook)({
-                    event: 'birthday_push_sent',
-                    reservationId: res.id,
-                    customerName: name,
-                    customerPhone: res.customerPhone,
-                    timestamp: new Date().toISOString()
-                });
                 sentCount++;
             }
         }
     }
     catch (error) {
-        console.error('❌ [Cron] Error running Birthday Push:', error);
+        console.error('❌ [Cron] Error running Outbound Marketing Engine:', error);
     }
-    console.log(`✅ [Cron] Birthday Push completed. Sent ${sentCount} messages.`);
-    return { sentCount };
+    console.log(`✅ [Cron] Daily Outbound Marketing completed. Sent: ${sentCount}, Halted: ${haltedCount}`);
+    return { sentCount, haltedCount };
 }
 /**
  * 🔄 30-Day Retention Nudge ("We Miss You")
@@ -78,7 +116,6 @@ async function runRetentionCron() {
     try {
         const allRestaurants = await connection_1.db.select().from(schema_1.restaurants);
         for (const restaurant of allRestaurants) {
-            // Find conversations where lastDinedAt was ~30 days ago
             const thirtyDaysAgoObj = (0, dateHelpers_1.nowIST)();
             thirtyDaysAgoObj.setDate(thirtyDaysAgoObj.getDate() - 30);
             const targetDate = thirtyDaysAgoObj.toISOString().split('T')[0];
@@ -103,16 +140,17 @@ async function runRetentionCron() {
     return { sentCount };
 }
 /**
- * 🌅 Morning-After 14-Hour Google Review Request
- * Runs hourly
+ * 🌅 Morning-After & Same-Day 2-Hour Review Queue Processor
+ * Runs every 10 minutes
  */
 async function runReviewRequestCron() {
-    console.log('⏰ [Cron] Checking for 14-Hour Google Review Requests...');
-    let sentCount = 0;
+    console.log('⏰ [Cron] Processing Same-Day & 2-Hour Delayed Review Queue...');
+    // Call 2-Hour Delayed Review Engine with 24-hr Free Window check
+    const reviewResult = await (0, reviewEngine_1.processPendingReviewQueue)();
+    let legacySentCount = 0;
     try {
         const allRestaurants = await connection_1.db.select().from(schema_1.restaurants);
         for (const restaurant of allRestaurants) {
-            // Find reservations marked 'seated' or 'completed' where reviewSent = 0
             const eligibleReservations = await connection_1.db
                 .select()
                 .from(schema_1.reservations)
@@ -121,21 +159,18 @@ async function runReviewRequestCron() {
             for (const res of eligibleReservations) {
                 if (res.stage !== 'seated' && res.stage !== 'completed')
                     continue;
-                // Parse reservation date & time
                 const resDateTime = new Date(`${res.date}T${res.time}:00Z`).getTime();
                 const diffHours = (now - resDateTime) / (1000 * 60 * 60);
-                // Send if dining was 14+ hours ago
-                if (diffHours >= 14) {
+                if (diffHours >= 2) {
                     const name = res.customerName || 'Guest';
                     const reviewUrl = restaurant.googleReviewUrl || 'https://maps.google.com';
-                    const msg = `🌟 *Morning-After Thank You from ${restaurant.name}!*\n\nHi ${name}, thank you for dining with us! We hope you had a fantastic experience.\n\nCould you take 15 seconds to share a 5-star Google review? It helps our local team immensely! 🙏\n\n${reviewUrl}`;
+                    const msg = `🌟 *Thank You from ${restaurant.name}!*\n\nHi ${name}, thank you for dining with us! We hope you had a fantastic experience.\n\nCould you take 15 seconds to share a 5-star Google review? It helps our team immensely! 🙏\n\n${reviewUrl}`;
                     await (0, sender_1.sendText)(restaurant, res.customerPhone, msg);
-                    // Mark reviewSent = 1
                     await connection_1.db
                         .update(schema_1.reservations)
                         .set({ reviewSent: true })
                         .where((0, drizzle_orm_1.eq)(schema_1.reservations.id, res.id));
-                    sentCount++;
+                    legacySentCount++;
                 }
             }
         }
@@ -143,26 +178,28 @@ async function runReviewRequestCron() {
     catch (error) {
         console.error('❌ [Cron] Error running Review Request:', error);
     }
-    console.log(`✅ [Cron] Review Request completed. Sent ${sentCount} messages.`);
-    return { sentCount };
+    const total = reviewResult.freeDeliveredCount + legacySentCount;
+    console.log(`✅ [Cron] Review Engine completed. Free-Window Delivered: ${reviewResult.freeDeliveredCount}, Legacy Delivered: ${legacySentCount}`);
+    return { sentCount: total };
 }
 /**
  * Initialize all background cron schedules
  */
 function startScheduler() {
-    console.log('⏰ Initializing Background Outbound Cron Scheduler...');
-    // Birthday Push - 9:00 AM IST daily
-    node_cron_1.default.schedule('0 9 * * *', () => {
-        runBirthdayPushCron().catch(console.error);
-    });
-    // Retention Nudge - 10:00 AM IST daily
+    console.log('⏰ Initializing Background Commercial Outbound Scheduler...');
+    // Outbound Marketing Engine - 10:00 AM IST daily
     node_cron_1.default.schedule('0 10 * * *', () => {
+        runBirthdayPushCron().catch(console.error);
         runRetentionCron().catch(console.error);
     });
-    // Review Requests - Every hour
-    node_cron_1.default.schedule('0 * * * *', () => {
+    // Midnight Monthly Quota Reset Script - 00:00 AM daily
+    node_cron_1.default.schedule('0 0 * * *', () => {
+        (0, quotaService_1.processMonthlyQuotaResets)().catch(console.error);
+    });
+    // Review Delay Queue - Every 10 minutes
+    node_cron_1.default.schedule('*/10 * * * *', () => {
         runReviewRequestCron().catch(console.error);
     });
-    console.log('✅ Background Cron Scheduler active (Birthday 9 AM, Retention 10 AM, Review hourly)');
+    console.log('✅ Background Scheduler active (Marketing 10 AM, Midnight Quota Reset 00:00, Review Queue 10m)');
 }
 //# sourceMappingURL=cron.js.map

@@ -45,6 +45,8 @@ const webhook_1 = __importDefault(require("./whatsapp/webhook"));
 const makeIntegration_1 = require("./services/makeIntegration");
 const drizzle_orm_1 = require("drizzle-orm");
 const cron_1 = require("./scheduler/cron");
+const quotaService_1 = require("./services/quotaService");
+const reviewEngine_1 = require("./services/reviewEngine");
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
@@ -86,7 +88,7 @@ app.post('/api/reservations/demo', async (req, res) => {
         const code = `HOB-RES-${randomDigits}`;
         const allRestaurants = await connection_1.db.select().from(schema_1.restaurants).limit(1);
         const restaurantId = allRestaurants.length > 0 ? allRestaurants[0].id : 1;
-        const restaurantName = allRestaurants.length > 0 ? allRestaurants[0].name : 'Spice Factory Rooftop & Lounge';
+        const restaurantName = allRestaurants.length > 0 ? allRestaurants[0].name : 'House of Bhaves Rooftop & Lounge (HOB)';
         const [newRes] = await connection_1.db.insert(schema_1.reservations).values({
             restaurantId,
             customerName: 'Vedant Bhave',
@@ -144,6 +146,8 @@ app.post('/api/reservations/status', async (req, res) => {
                     .update(schema_1.conversations)
                     .set(updates)
                     .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.conversations.phone, updated.customerPhone), (0, drizzle_orm_1.eq)(schema_1.conversations.restaurantId, updated.restaurantId)));
+                // Schedule 2-Hour Asynchronous Same-Day Review Delay Queue
+                await (0, reviewEngine_1.scheduleSameDayReview)(updated.id, 120);
             }
             await (0, makeIntegration_1.sendToMakeWebhook)({
                 event: 'status_updated',
@@ -166,6 +170,19 @@ app.post('/api/reservations/status', async (req, res) => {
         res.status(500).json({ error: 'Failed to update status' });
     }
 });
+// Agency Control API Endpoints
+app.post('/api/agency/reset-quotas', async (req, res) => {
+    const result = await (0, quotaService_1.processMonthlyQuotaResets)();
+    res.json(result);
+});
+app.post('/api/agency/trigger-review-queue', async (req, res) => {
+    const result = await (0, reviewEngine_1.processPendingReviewQueue)();
+    res.json(result);
+});
+app.post('/api/agency/trigger-marketing-cron', async (req, res) => {
+    const result = await (0, cron_1.runBirthdayPushCron)();
+    res.json(result);
+});
 // Test Cron Trigger Endpoints
 app.post('/api/test/cron-birthday', async (req, res) => {
     const result = await (0, cron_1.runBirthdayPushCron)();
@@ -179,11 +196,302 @@ app.post('/api/test/cron-review', async (req, res) => {
     const result = await (0, cron_1.runReviewRequestCron)();
     res.json(result);
 });
+// ----------------------------------------------------
+// 🏛️ MASTER AGENCY DASHBOARD (GET /agency)
+// ----------------------------------------------------
+app.get('/agency', async (req, res) => {
+    try {
+        const clientList = await connection_1.db.select().from(schema_1.clients);
+        // Financial & Metric Calculations
+        const activeClientsCount = clientList.filter(c => c.active).length;
+        const tier1Count = clientList.filter(c => c.billingCycle === 'monthly').length;
+        const tier2Count = clientList.filter(c => c.billingCycle === 'quarterly').length;
+        // Monthly Recurring Revenue (MRR): Monthly ₹14,999 + Quarterly (₹39,996 / 3 = ₹13,332/mo)
+        const mrr = (tier1Count * 14999) + (tier2Count * 13332);
+        let totalOutboundSent = 0;
+        clientList.forEach(c => totalOutboundSent += (c.outboundSentThisMonth || 0));
+        // Meta API Base Cost (India Outbound Marketing): ₹1.02 per message
+        const totalMetaCost = Math.round(totalOutboundSent * 1.02);
+        const netProfit = mrr - totalMetaCost;
+        const profitMargin = mrr > 0 ? Math.round((netProfit / mrr) * 100) : 93;
+        const clientRowsHtml = clientList.map(c => {
+            const sent = c.outboundSentThisMonth || 0;
+            const maxQuota = c.outboundAllowanceMonthly || 1000;
+            const pct = Math.min(Math.round((sent / maxQuota) * 100), 100);
+            const isQuotaFull = sent >= maxQuota;
+            const metaExpense = (sent * 1.02).toFixed(2);
+            const tierPrice = c.billingCycle === 'quarterly' ? '₹39,996 / qtr' : '₹14,999 / mo';
+            const tierBadgeClass = c.billingCycle === 'quarterly' ? 'tier-quarterly' : 'tier-monthly';
+            return `
+        <tr class="${isQuotaFull ? 'row-quota-full' : ''}">
+          <td class="client-name">
+            <strong>${c.businessName}</strong>
+            <div class="client-slug">Slug: /restaurant/${c.slug}</div>
+          </td>
+          <td>
+            <span class="tier-badge ${tierBadgeClass}">${(c.billingCycle || 'monthly').toUpperCase()} (${tierPrice})</span>
+          </td>
+          <td>
+            <div class="quota-meter-container">
+              <div class="quota-text">
+                <span>${sent} / ${maxQuota} msgs</span>
+                <span class="${isQuotaFull ? 'text-danger' : 'text-success'}">${pct}%</span>
+              </div>
+              <div class="progress-bar-bg">
+                <div class="progress-bar-fill ${isQuotaFull ? 'fill-full' : ''}" style="width: ${pct}%"></div>
+              </div>
+              ${isQuotaFull ? '<div class="quota-warning">🛑 Smart Cut-off Active (Quota Limit Reached)</div>' : ''}
+            </div>
+          </td>
+          <td>
+            <div class="resets-date">📅 ${c.nextMonthlyResetDate || 'Next Midnight'}</div>
+          </td>
+          <td>
+            <div class="meta-cost">₹${metaExpense}</div>
+            <div class="cost-note">@ ₹1.02/msg</div>
+          </td>
+          <td>
+            <a href="/restaurant/${c.slug}" target="_blank" class="btn-view-logbook">📋 Open Logbook</a>
+          </td>
+        </tr>
+      `;
+        }).join('');
+        const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agency Operations Master | House of Bhaves</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Instrument Sans', -apple-system, sans-serif;
+      background: #0B0A0A;
+      color: #F3EFE6;
+      padding: 32px;
+      min-height: 100vh;
+    }
+    .container { max-width: 1320px; margin: 0 auto; }
+    .header-banner {
+      background: linear-gradient(135deg, #1C1917 0%, #0F0E0D 100%);
+      border: 2px solid #322E28;
+      padding: 28px 36px;
+      border-radius: 18px;
+      margin-bottom: 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    }
+    .agency-title h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: #F59E0B;
+    }
+    .agency-title p { color: #A8A29E; font-size: 13px; margin-top: 4px; }
+    .mrr-badge {
+      background: rgba(245, 158, 11, 0.12);
+      border: 1.5px solid #F59E0B;
+      color: #F59E0B;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      padding: 10px 20px;
+      border-radius: 12px;
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+    .metric-card {
+      background: #141312;
+      border: 2px solid #282522;
+      padding: 24px;
+      border-radius: 16px;
+      text-align: center;
+    }
+    .metric-val {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 32px;
+      font-weight: 700;
+      color: #F3EFE6;
+      margin-bottom: 4px;
+    }
+    .metric-lbl { font-size: 12px; color: #A8A29E; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; }
+    .val-green { color: #4ADE80; }
+    .val-amber { color: #F59E0B; }
+    .control-actions {
+      background: #141312;
+      border: 2px solid #282522;
+      padding: 18px 24px;
+      border-radius: 14px;
+      margin-bottom: 32px;
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .action-btn {
+      background: #282522;
+      border: 1.5px solid #3E3932;
+      color: #F3EFE6;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .action-btn:hover { background: #F59E0B; color: #000; border-color: #F59E0B; }
+    .table-container {
+      background: #141312;
+      border: 2px solid #282522;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th {
+      background: #1C1917;
+      padding: 16px 20px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      color: #A8A29E;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      border-bottom: 2px solid #282522;
+    }
+    td { padding: 18px 20px; border-bottom: 1px solid #22201D; font-size: 14px; }
+    .client-name { font-size: 16px; }
+    .client-slug { font-size: 12px; color: #F59E0B; font-family: monospace; margin-top: 2px; }
+    .tier-badge {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+    .tier-monthly { background: rgba(59, 130, 246, 0.15); color: #60A5FA; border: 1px solid #3B82F6; }
+    .tier-quarterly { background: rgba(168, 85, 247, 0.15); color: #C084FC; border: 1px solid #A855F7; }
+    .quota-meter-container { width: 220px; }
+    .quota-text { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+    .progress-bar-bg { width: 100%; height: 8px; background: #22201D; border-radius: 4px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; background: #F59E0B; border-radius: 4px; }
+    .fill-full { background: #EF4444 !important; }
+    .text-danger { color: #EF4444; font-weight: 700; }
+    .text-success { color: #4ADE80; font-weight: 700; }
+    .quota-warning { font-size: 10px; color: #EF4444; font-weight: 700; margin-top: 4px; }
+    .meta-cost { font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 700; color: #F3EFE6; }
+    .cost-note { font-size: 10px; color: #78716C; }
+    .btn-view-logbook {
+      background: #1C1917;
+      border: 1px solid #3E3932;
+      color: #F59E0B;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn-view-logbook:hover { background: #F59E0B; color: #000; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-banner">
+      <div class="agency-title">
+        <h1>🚀 Commercial Agency Master Dashboard</h1>
+        <p>Operational Architecture & Meta Cloud API Cost Ledger • House of Bhaves</p>
+      </div>
+      <div class="mrr-badge">
+        💰 MRR: ₹${mrr.toLocaleString('en-IN')}/mo
+      </div>
+    </div>
+
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-val val-amber">${activeClientsCount}</div>
+        <div class="metric-lbl">Active Agency Clients</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val">${tier1Count} / ${tier2Count}</div>
+        <div class="metric-lbl">Monthly / Quarterly Tiers</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val val-green">~${profitMargin}%</div>
+        <div class="metric-lbl">Net Profit Margin</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val">${totalOutboundSent}</div>
+        <div class="metric-lbl">Outbound Msgs Sent</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val">₹${totalMetaCost}</div>
+        <div class="metric-lbl">Meta Out-of-Pocket Expense</div>
+      </div>
+    </div>
+
+    <div class="control-actions">
+      <strong style="font-size: 13px; text-transform: uppercase; color: #A8A29E; font-family: 'Space Grotesk';">⚡ Agency Admin Actions:</strong>
+      <button onclick="triggerAction('/api/agency/reset-quotas')" class="action-btn">🔄 Trigger Midnight Quota Reset</button>
+      <button onclick="triggerAction('/api/agency/trigger-review-queue')" class="action-btn">⏱️ Process 2-Hr Review Queue</button>
+      <button onclick="triggerAction('/api/agency/trigger-marketing-cron')" class="action-btn">📢 Run 10 AM Outbound Cron</button>
+    </div>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Client Business</th>
+            <th>Subscription Tier</th>
+            <th>Monthly Outbound Quota (1,000 Cap)</th>
+            <th>Reset Schedule</th>
+            <th>Meta API Out-of-Pocket</th>
+            <th>Hostess Logbook</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${clientRowsHtml}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    async function triggerAction(endpoint) {
+      try {
+        const res = await fetch(endpoint, { method: 'POST' });
+        const data = await res.json();
+        alert('Action Executed: ' + JSON.stringify(data));
+        window.location.reload();
+      } catch (err) {
+        alert('Action error: ' + err.message);
+      }
+    }
+  </script>
+</body>
+</html>
+    `;
+        res.send(html);
+    }
+    catch (error) {
+        console.error('Agency dashboard error:', error);
+        res.status(500).send('Internal Server Error');
+    }
+});
 // Multi-tenant slug route & fallback
 app.get('/restaurant/:slug?', async (req, res) => {
     try {
         const slug = req.params.slug || 'hob-restaurant';
-        // Find restaurant by slug
         let restaurantList = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.slug, slug)).limit(1);
         if (restaurantList.length === 0) {
             restaurantList = await connection_1.db.select().from(schema_1.restaurants).limit(1);
@@ -646,8 +954,9 @@ async function main() {
     // Start background outbound cron scheduler
     (0, cron_1.startScheduler)();
     app.listen(config_1.config.PORT, () => {
-        console.log(`🍽️ Spice Factory Bot running on port ${config_1.config.PORT}`);
-        console.log(`📊 Multi-Tenant Dashboard: http://localhost:${config_1.config.PORT}/restaurant/spice-factory`);
+        console.log(`🚀 House of Bhaves Agency Platform running on port ${config_1.config.PORT}`);
+        console.log(`🏛️ Master Agency Dashboard: http://localhost:${config_1.config.PORT}/agency`);
+        console.log(`📋 Client Logbook: http://localhost:${config_1.config.PORT}/restaurant/hob-restaurant`);
         console.log(`🔗 Webhook: http://localhost:${config_1.config.PORT}/webhook`);
     });
 }

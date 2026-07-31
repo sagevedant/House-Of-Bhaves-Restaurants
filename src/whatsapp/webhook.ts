@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { config } from '../config';
 import { parseWebhookPayload } from './parser';
 import { handleIncomingEvent } from '../bot/router';
+import { db } from '../db/connection';
+import { customers } from '../db/schema';
+import { eq, and } from 'drizzle-orm';
 
 const router = Router();
 
@@ -38,6 +41,28 @@ router.post('/', (req, res) => {
         for (const event of webhook.events) {
           try {
             console.log(`⚡ [HANDLING EVENT]:`, JSON.stringify(event, null, 2));
+
+            // Record 24-hour Free Customer Service Window timestamp
+            if ('from' in event && event.from) {
+              const nowIso = new Date().toISOString();
+              try {
+                const existingCustomer = await db
+                  .select()
+                  .from(customers)
+                  .where(eq(customers.phoneNumber, event.from))
+                  .limit(1);
+
+                if (existingCustomer.length > 0) {
+                  await db
+                    .update(customers)
+                    .set({ lastInboundInteraction: nowIso, updatedAt: nowIso })
+                    .where(eq(customers.id, existingCustomer[0].id));
+                }
+              } catch (err) {
+                // Non-critical background timestamp update
+              }
+            }
+
             await handleIncomingEvent(webhook.phoneNumberId, event);
           } catch (e) {
             console.error('❌ Error handling event:', e);
