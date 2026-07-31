@@ -50,6 +50,63 @@ app.get('/deletion', (req, res) => {
   `);
 });
 
+// CSV Export Endpoint for Restaurant Hostess Logbook
+app.get('/api/restaurant/:slug/export', async (req, res) => {
+  try {
+    const slug = req.params.slug;
+    const clientMatches = await db.select().from(clients).where(eq(clients.slug, slug)).limit(1);
+    const restMatches = await db.select().from(restaurants).where(eq(restaurants.slug, slug)).limit(1);
+
+    const client = clientMatches[0];
+    const restaurant = restMatches[0];
+    const name = client?.businessName || restaurant?.name || 'Restaurant';
+
+    let allRes: any[] = [];
+    if (client) {
+      const clientBookings = await db.select().from(bookings).where(eq(bookings.clientId, client.id)).orderBy(desc(bookings.createdAt));
+      allRes = clientBookings.map(b => ({
+        code: b.reservationCode || '',
+        name: b.customerName || 'Guest',
+        phone: b.customerPhone || '',
+        guests: b.guests || 2,
+        occasion: b.occasion || 'casual',
+        date: b.date || '',
+        time: b.time || '',
+        status: b.status || 'booked',
+        createdAt: b.createdAt || ''
+      }));
+    }
+
+    if (allRes.length === 0 && restaurant) {
+      const restReservations = await db.select().from(reservations).where(eq(reservations.restaurantId, restaurant.id)).orderBy(desc(reservations.createdAt));
+      allRes = restReservations.map(r => ({
+        code: r.reservationCode || '',
+        name: r.customerName || 'Guest',
+        phone: r.customerPhone || '',
+        guests: r.guests || 2,
+        occasion: r.occasion || 'casual',
+        date: r.date || '',
+        time: r.time || '',
+        status: r.stage || 'booked',
+        createdAt: r.createdAt || ''
+      }));
+    }
+
+    let csvContent = 'Reservation Code,Customer Name,Phone Number,Guests,Occasion,Date,Time,Status,Created At\n';
+    for (const r of allRes) {
+      const line = `"${r.code}","${r.name}","+${r.phone}",${r.guests},"${r.occasion}","${r.date}","${r.time}","${r.status}","${r.createdAt}"\n`;
+      csvContent += line;
+    }
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${slug}-reservations-${new Date().toISOString().split('T')[0]}.csv"`);
+    res.status(200).send(csvContent);
+  } catch (error) {
+    console.error('Export error:', error);
+    res.status(500).send('Failed to export CSV');
+  }
+});
+
 // Demo reservation creation endpoint
 app.post('/api/reservations/demo', async (req, res) => {
   try {
@@ -941,7 +998,7 @@ app.get('/restaurant/:slug?', async (req, res) => {
       color: #F3EFE6;
     }
     .restaurant-title p { color: #A8A29E; font-size: 13px; margin-top: 4px; font-weight: 600; }
-    .header-right { display: flex; align-items: center; gap: 16px; }
+    .header-right { display: flex; align-items: center; gap: 14px; }
     .live-badge {
       background: rgba(34, 197, 94, 0.12);
       border: 1.5px solid #22C55E;
@@ -956,6 +1013,21 @@ app.get('/restaurant/:slug?', async (req, res) => {
       gap: 8px;
       text-transform: uppercase;
     }
+    .btn-export {
+      background: #F59E0B;
+      color: #0D0C0B;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-export:hover { background: #D97706; }
     .pulse {
       width: 8px; height: 8px;
       background: #22C55E;
@@ -1106,6 +1178,7 @@ app.get('/restaurant/:slug?', async (req, res) => {
         <p>Hostess Front-Desk Ledger • URL Slug: /restaurant/${displaySlug}</p>
       </div>
       <div class="header-right">
+        <a href="/api/restaurant/${displaySlug}/export" class="btn-export">📥 Export CSV</a>
         <div class="live-badge">
           <div class="pulse"></div> Live Reception Sync
         </div>
