@@ -216,7 +216,14 @@ async function initializeDatabase() {
         await exports.sqlite.execute(`ALTER TABLE bookings ADD COLUMN review_scheduled_at TEXT;`);
     }
     catch { }
-    await exports.sqlite.execute(`PRAGMA journal_mode = WAL`);
-    await exports.sqlite.execute(`PRAGMA foreign_keys = ON`);
+    // Safe PRAGMA Execution (Skipped cleanly on Turso Cloud HTTP)
+    try {
+        await exports.sqlite.execute(`PRAGMA journal_mode = WAL`);
+    }
+    catch { }
+    try {
+        await exports.sqlite.execute(`PRAGMA foreign_keys = ON`);
+    }
+    catch { }
 }
 //# sourceMappingURL=connection.js.map

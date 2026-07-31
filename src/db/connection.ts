@@ -159,6 +159,7 @@ export async function initializeDatabase() {
   try { await sqlite.execute(`ALTER TABLE customers ADD COLUMN last_inbound_interaction TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE bookings ADD COLUMN review_scheduled_at TEXT;`); } catch {}
 
-  await sqlite.execute(`PRAGMA journal_mode = WAL`);
-  await sqlite.execute(`PRAGMA foreign_keys = ON`);
+  // Safe PRAGMA Execution (Skipped cleanly on Turso Cloud HTTP)
+  try { await sqlite.execute(`PRAGMA journal_mode = WAL`); } catch {}
+  try { await sqlite.execute(`PRAGMA foreign_keys = ON`); } catch {}
 }
