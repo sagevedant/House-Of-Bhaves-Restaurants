@@ -183,18 +183,201 @@ app.post('/api/agency/trigger-marketing-cron', async (req, res) => {
     const result = await (0, cron_1.runBirthdayPushCron)();
     res.json(result);
 });
-// Test Cron Trigger Endpoints
-app.post('/api/test/cron-birthday', async (req, res) => {
-    const result = await (0, cron_1.runBirthdayPushCron)();
-    res.json(result);
+// ----------------------------------------------------
+// 📝 RESTAURANT CLIENT ONBOARDING PORTAL (GET /onboard)
+// ----------------------------------------------------
+app.get('/onboard', (req, res) => {
+    res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Onboard New Restaurant | House of Bhaves Agency</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Instrument Sans', -apple-system, sans-serif;
+      background: #0D0C0B;
+      color: #F3EFE6;
+      padding: 32px 20px;
+      min-height: 100vh;
+    }
+    .form-container {
+      max-width: 680px;
+      margin: 0 auto;
+      background: #171614;
+      border: 2px solid #322E28;
+      border-radius: 20px;
+      padding: 36px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+    }
+    .form-header { text-align: center; margin-bottom: 28px; }
+    .form-header h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 26px;
+      color: #F59E0B;
+      font-weight: 700;
+    }
+    .form-header p { color: #A8A29E; font-size: 14px; margin-top: 6px; }
+    .form-group { margin-bottom: 20px; }
+    label {
+      display: block;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: #F3EFE6;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    input, select, textarea {
+      width: 100%;
+      background: #0E0D0C;
+      border: 1.5px solid #3A352E;
+      color: #F3EFE6;
+      padding: 14px 16px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: inherit;
+    }
+    input:focus, select:focus { border-color: #F59E0B; outline: none; }
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .submit-btn {
+      width: 100%;
+      background: #F59E0B;
+      border: none;
+      color: #0D0C0B;
+      padding: 16px;
+      border-radius: 12px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .submit-btn:hover { background: #D97706; }
+    .note { font-size: 12px; color: #78716C; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="form-container">
+    <div class="form-header">
+      <h1>🍽️ Onboard New Restaurant Client</h1>
+      <p>Configure WhatsApp Credentials, Custom URL Slug & Subscription Tier</p>
+    </div>
+
+    <form action="/api/agency/onboard" method="POST">
+      <div class="form-group">
+        <label>Restaurant Business Name *</label>
+        <input type="text" name="businessName" placeholder="e.g. Spice Factory Rooftop & Lounge" required>
+      </div>
+
+      <div class="row-2">
+        <div class="form-group">
+          <label>Custom URL Slug *</label>
+          <input type="text" name="slug" placeholder="e.g. spice-factory-baner" required>
+          <div class="note">Generates /restaurant/:slug logbook</div>
+        </div>
+
+        <div class="form-group">
+          <label>Subscription Tier *</label>
+          <select name="billingCycle" required>
+            <option value="monthly">Tier 1: Monthly (₹14,999/mo)</option>
+            <option value="quarterly" selected>Tier 2: Quarterly Bundle (₹39,996 upfront)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Restaurant Address & Landmark</label>
+        <input type="text" name="address" placeholder="Baner Road, Pune 411045" value="Baner Road, Pune 411045">
+      </div>
+
+      <div class="row-2">
+        <div class="form-group">
+          <label>Meta WhatsApp Phone Number ID *</label>
+          <input type="text" name="whatsappPhoneNumberId" placeholder="1167895203082852" required>
+        </div>
+
+        <div class="form-group">
+          <label>Reservation Code Prefix *</label>
+          <input type="text" name="prefix" placeholder="SPF" value="SPF" required>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Meta Permanent Access Token *</label>
+        <input type="text" name="metaAccessToken" placeholder="EAA4bXmG..." required>
+      </div>
+
+      <div class="row-2">
+        <div class="form-group">
+          <label>Manager WhatsApp Phone</label>
+          <input type="text" name="managerPhone" placeholder="919699533441" value="919699533441">
+        </div>
+
+        <div class="form-group">
+          <label>Google Review URL</label>
+          <input type="text" name="googleReviewUrl" placeholder="https://maps.google.com" value="https://maps.google.com">
+        </div>
+      </div>
+
+      <button type="submit" class="submit-btn">✨ Save & Activate Restaurant Client</button>
+    </form>
+  </div>
+</body>
+</html>
+  `);
 });
-app.post('/api/test/cron-retention', async (req, res) => {
-    const result = await (0, cron_1.runRetentionCron)();
-    res.json(result);
-});
-app.post('/api/test/cron-review', async (req, res) => {
-    const result = await (0, cron_1.runReviewRequestCron)();
-    res.json(result);
+// Client Onboarding Submission Endpoint
+app.post('/api/agency/onboard', async (req, res) => {
+    try {
+        const { businessName, slug, billingCycle, address, whatsappPhoneNumberId, metaAccessToken, prefix, managerPhone, googleReviewUrl } = req.body;
+        if (!businessName || !slug || !whatsappPhoneNumberId || !metaAccessToken) {
+            return res.status(400).send('Missing required fields: businessName, slug, whatsappPhoneNumberId, metaAccessToken');
+        }
+        const cleanSlug = slug.toLowerCase().trim().replace(/[^a-z0-9-]/g, '-');
+        const today = new Date();
+        const nextResetObj = new Date();
+        nextResetObj.setDate(today.getDate() + 30);
+        const nextResetDate = nextResetObj.toISOString().split('T')[0];
+        // Insert into clients table
+        await connection_1.db.insert(schema_1.clients).values({
+            businessName,
+            slug: cleanSlug,
+            billingCycle: billingCycle || 'monthly',
+            outboundAllowanceMonthly: 1000,
+            outboundSentThisMonth: 0,
+            nextMonthlyResetDate: nextResetDate,
+            whatsappPhoneNumberId,
+            metaAccessToken,
+            prefix: prefix || 'HOB',
+            googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
+            active: true
+        });
+        // Also insert into restaurants table (for backward compatibility)
+        await connection_1.db.insert(schema_1.restaurants).values({
+            name: businessName,
+            slug: cleanSlug,
+            address: address || 'Baner Road, Pune',
+            whatsappPhoneNumberId,
+            metaAccessToken,
+            prefix: prefix || 'HOB',
+            managerPhone: managerPhone || '919699533441',
+            googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
+            active: true
+        });
+        console.log(`✅ [Onboarding Success] Successfully onboarded restaurant: ${businessName} (${cleanSlug})`);
+        res.redirect(`/agency?onboarded=${cleanSlug}`);
+    }
+    catch (error) {
+        console.error('Onboarding error:', error);
+        res.status(500).send(`Onboarding Error: ${error.message}`);
+    }
 });
 // ----------------------------------------------------
 // 🏛️ MASTER AGENCY DASHBOARD (GET /agency)
@@ -214,15 +397,17 @@ app.get('/agency', async (req, res) => {
         const totalMetaCost = Math.round(totalOutboundSent * 1.02);
         const netProfit = mrr - totalMetaCost;
         const profitMargin = mrr > 0 ? Math.round((netProfit / mrr) * 100) : 93;
-        const clientRowsHtml = clientList.map(c => {
-            const sent = c.outboundSentThisMonth || 0;
-            const maxQuota = c.outboundAllowanceMonthly || 1000;
-            const pct = Math.min(Math.round((sent / maxQuota) * 100), 100);
-            const isQuotaFull = sent >= maxQuota;
-            const metaExpense = (sent * 1.02).toFixed(2);
-            const tierPrice = c.billingCycle === 'quarterly' ? '₹39,996 / qtr' : '₹14,999 / mo';
-            const tierBadgeClass = c.billingCycle === 'quarterly' ? 'tier-quarterly' : 'tier-monthly';
-            return `
+        const clientRowsHtml = clientList.length === 0
+            ? `<tr><td colspan="6" style="text-align:center; padding: 40px; color: #A8A29E;">No restaurants onboarded yet. Click "Onboard New Restaurant" to get started!</td></tr>`
+            : clientList.map(c => {
+                const sent = c.outboundSentThisMonth || 0;
+                const maxQuota = c.outboundAllowanceMonthly || 1000;
+                const pct = Math.min(Math.round((sent / maxQuota) * 100), 100);
+                const isQuotaFull = sent >= maxQuota;
+                const metaExpense = (sent * 1.02).toFixed(2);
+                const tierPrice = c.billingCycle === 'quarterly' ? '₹39,996 / qtr' : '₹14,999 / mo';
+                const tierBadgeClass = c.billingCycle === 'quarterly' ? 'tier-quarterly' : 'tier-monthly';
+                return `
         <tr class="${isQuotaFull ? 'row-quota-full' : ''}">
           <td class="client-name">
             <strong>${c.businessName}</strong>
@@ -255,7 +440,7 @@ app.get('/agency', async (req, res) => {
           </td>
         </tr>
       `;
-        }).join('');
+            }).join('');
         const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -294,14 +479,27 @@ app.get('/agency', async (req, res) => {
       color: #F59E0B;
     }
     .agency-title p { color: #A8A29E; font-size: 13px; margin-top: 4px; }
+    .header-right-btns { display: flex; align-items: center; gap: 14px; }
+    .btn-onboard {
+      background: #F59E0B;
+      color: #000;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .btn-onboard:hover { background: #D97706; }
     .mrr-badge {
       background: rgba(245, 158, 11, 0.12);
       border: 1.5px solid #F59E0B;
       color: #F59E0B;
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 700;
-      padding: 10px 20px;
+      padding: 10px 18px;
       border-radius: 12px;
     }
     .metrics-grid {
@@ -409,18 +607,21 @@ app.get('/agency', async (req, res) => {
   <div class="container">
     <div class="header-banner">
       <div class="agency-title">
-        <h1>🚀 Commercial Agency Master Dashboard</h1>
-        <p>Operational Architecture & Meta Cloud API Cost Ledger • House of Bhaves</p>
+        <h1>🍽️ Restaurant Agency Operations Master</h1>
+        <p>Commercial Accounts & Meta API Cost Ledger • House of Bhaves</p>
       </div>
-      <div class="mrr-badge">
-        💰 MRR: ₹${mrr.toLocaleString('en-IN')}/mo
+      <div class="header-right-btns">
+        <a href="/onboard" class="btn-onboard">➕ Onboard New Restaurant</a>
+        <div class="mrr-badge">
+          💰 MRR: ₹${mrr.toLocaleString('en-IN')}/mo
+        </div>
       </div>
     </div>
 
     <div class="metrics-grid">
       <div class="metric-card">
         <div class="metric-val val-amber">${activeClientsCount}</div>
-        <div class="metric-lbl">Active Agency Clients</div>
+        <div class="metric-lbl">Active Restaurants</div>
       </div>
       <div class="metric-card">
         <div class="metric-val">${tier1Count} / ${tier2Count}</div>
@@ -451,7 +652,7 @@ app.get('/agency', async (req, res) => {
       <table>
         <thead>
           <tr>
-            <th>Client Business</th>
+            <th>Restaurant Client</th>
             <th>Subscription Tier</th>
             <th>Monthly Outbound Quota (1,000 Cap)</th>
             <th>Reset Schedule</th>
@@ -956,6 +1157,7 @@ async function main() {
     app.listen(config_1.config.PORT, () => {
         console.log(`🚀 House of Bhaves Agency Platform running on port ${config_1.config.PORT}`);
         console.log(`🏛️ Master Agency Dashboard: http://localhost:${config_1.config.PORT}/agency`);
+        console.log(`📝 Onboard Restaurant Portal: http://localhost:${config_1.config.PORT}/onboard`);
         console.log(`📋 Client Logbook: http://localhost:${config_1.config.PORT}/restaurant/hob-restaurant`);
         console.log(`🔗 Webhook: http://localhost:${config_1.config.PORT}/webhook`);
     });

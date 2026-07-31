@@ -7,24 +7,24 @@ import { config } from '../config';
 export async function seedDatabase() {
   try {
     // ----------------------------------------------------
-    // SEED COMMERCIAL AGENCY CLIENTS
+    // SEED REAL COMMERCIAL RESTAURANT CLIENTS
     // ----------------------------------------------------
     const existingClient = await db.select().from(clients).where(eq(clients.slug, 'hob-restaurant')).get();
     
     const today = new Date();
     const nextResetObj = new Date();
-    nextResetObj.setDate(today.getDate() + 25);
+    nextResetObj.setDate(today.getDate() + 30);
     const nextResetDate = nextResetObj.toISOString().split('T')[0];
     const todayYmd = today.toISOString().split('T')[0];
 
     if (!existingClient) {
-      // 1. House of Bhaves (Tier 2 Quarterly Plan)
+      // 1. House of Bhaves Rooftop & Lounge (Tier 2 Quarterly Plan)
       const [hobClient] = await db.insert(clients).values({
         businessName: 'House of Bhaves Rooftop & Lounge (HOB)',
         slug: 'hob-restaurant',
         billingCycle: 'quarterly',
         outboundAllowanceMonthly: 1000,
-        outboundSentThisMonth: 420,
+        outboundSentThisMonth: 0,
         nextMonthlyResetDate: nextResetDate,
         whatsappPhoneNumberId: config.whatsappPhoneNumberId || '1167895203082852',
         metaAccessToken: config.metaAccessToken || 'PLACEHOLDER_TOKEN',
@@ -33,44 +33,14 @@ export async function seedDatabase() {
         active: true,
       }).returning();
 
-      // 2. Garve Hyundai Showroom (Tier 1 Monthly Plan)
-      await db.insert(clients).values({
-        businessName: 'Garve Hyundai Showroom',
-        slug: 'garve-hyundai',
-        billingCycle: 'monthly',
-        outboundAllowanceMonthly: 1000,
-        outboundSentThisMonth: 850,
-        nextMonthlyResetDate: nextResetDate,
-        whatsappPhoneNumberId: '227890112345678',
-        metaAccessToken: 'PLACEHOLDER_GARVE_TOKEN',
-        prefix: 'GARVE',
-        googleReviewUrl: 'https://maps.google.com',
-        active: true,
-      });
-
-      // 3. Spice Factory Baner (Tier 1 Monthly Plan - Quota Limit Reached Demo)
-      await db.insert(clients).values({
-        businessName: 'Spice Factory Baner',
-        slug: 'spice-factory',
-        billingCycle: 'monthly',
-        outboundAllowanceMonthly: 1000,
-        outboundSentThisMonth: 1000, // Halts outbounds
-        nextMonthlyResetDate: nextResetDate,
-        whatsappPhoneNumberId: '334567890123456',
-        metaAccessToken: 'PLACEHOLDER_SPICE_TOKEN',
-        prefix: 'SPF',
-        googleReviewUrl: 'https://maps.google.com',
-        active: true,
-      });
-
-      // Seed Customers & Bookings for HOB
+      // Seed Real Initial Customer & Booking for HOB
       const [cust1] = await db.insert(customers).values({
         clientId: hobClient.id,
         phoneNumber: '919699533441',
         customerName: 'Vedant Bhave',
         birthday: '08-05',
         anniversary: '12-14',
-        lastInboundInteraction: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hrs ago (within 24h)
+        lastInboundInteraction: new Date().toISOString(),
         lastDinedAt: todayYmd,
       }).returning();
 
@@ -86,22 +56,10 @@ export async function seedDatabase() {
           time: '20:30',
           reservationCode: 'HOB-RES-4891',
           status: 'booked',
-        },
-        {
-          clientId: hobClient.id,
-          customerName: 'Amit Sharma',
-          customerPhone: '919823011223',
-          guests: 6,
-          occasion: 'party',
-          date: todayYmd,
-          time: '21:00',
-          reservationCode: 'HOB-RES-9102',
-          status: 'seated',
-          reviewScheduledAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // Ready for review queue
         }
       ]);
 
-      console.log('✅ Seed: Inserted Commercial Agency Clients (HOB, Garve Hyundai, Spice Factory).');
+      console.log('✅ Seed: Inserted Real Restaurant Client: House of Bhaves (HOB).');
     }
 
     // ----------------------------------------------------
@@ -146,36 +104,6 @@ export async function seedDatabase() {
       }
 
       await db.update(restaurants).set(updates).where(eq(restaurants.id, existing.id));
-      console.log('✅ Seed: Updated HOB restaurant credentials in DB.');
-    }
-
-    const existingRes = await db.select().from(reservations).limit(1);
-    if (existingRes.length === 0 && restaurantId) {
-      await db.insert(reservations).values([
-        {
-          restaurantId,
-          customerName: 'Vedant Bhave',
-          customerPhone: '919699533441',
-          guests: 4,
-          occasion: 'birthday',
-          date: todayYmd,
-          time: '20:30',
-          reservationCode: 'HOB-RES-4891',
-          stage: 'booked',
-        },
-        {
-          restaurantId,
-          customerName: 'Amit Sharma',
-          customerPhone: '919823011223',
-          guests: 6,
-          occasion: 'party',
-          date: todayYmd,
-          time: '21:00',
-          reservationCode: 'HOB-RES-9102',
-          stage: 'seated',
-        }
-      ]);
-      console.log('✅ Seed: Inserted initial demo reservations.');
     }
   } catch (error) {
     console.error('❌ Seed error:', error);
