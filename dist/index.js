@@ -45,7 +45,6 @@ const webhook_1 = __importDefault(require("./whatsapp/webhook"));
 const makeIntegration_1 = require("./services/makeIntegration");
 const drizzle_orm_1 = require("drizzle-orm");
 const cron_1 = require("./scheduler/cron");
-const quotaService_1 = require("./services/quotaService");
 const reviewEngine_1 = require("./services/reviewEngine");
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
@@ -170,17 +169,9 @@ app.post('/api/reservations/status', async (req, res) => {
         res.status(500).json({ error: 'Failed to update status' });
     }
 });
-// Agency Control API Endpoints
-app.post('/api/agency/reset-quotas', async (req, res) => {
-    const result = await (0, quotaService_1.processMonthlyQuotaResets)();
-    res.json(result);
-});
+// Agency Control API Endpoint (Same-Day Review Queue Trigger)
 app.post('/api/agency/trigger-review-queue', async (req, res) => {
     const result = await (0, reviewEngine_1.processPendingReviewQueue)();
-    res.json(result);
-});
-app.post('/api/agency/trigger-marketing-cron', async (req, res) => {
-    const result = await (0, cron_1.runBirthdayPushCron)();
     res.json(result);
 });
 // ----------------------------------------------------
@@ -406,23 +397,17 @@ app.get('/agency', async (req, res) => {
         const tier1Count = clientList.filter(c => c.billingCycle === 'monthly').length;
         const tier2Count = clientList.filter(c => c.billingCycle === 'quarterly').length;
         const mrr = (tier1Count * 9999) + (tier2Count * 8333);
-        let totalOutboundSent = 0;
-        clientList.forEach(c => totalOutboundSent += (c.outboundSentThisMonth || 0));
         // Pure Automation Meta Cost = ₹0.00 (Customer Service Window)
-        const totalMetaCost = Math.round(totalOutboundSent * 1.02);
-        const netProfit = mrr - totalMetaCost;
-        const profitMargin = mrr > 0 ? Math.round((netProfit / mrr) * 100) : 99;
+        const totalMetaCost = 0;
+        const netProfit = mrr;
+        const profitMargin = mrr > 0 ? 100 : 100;
         const clientRowsHtml = clientList.length === 0
             ? `<tr><td colspan="6" style="text-align:center; padding: 40px; color: #A8A29E;">No restaurants onboarded yet. Click "Onboard New Restaurant" to get started!</td></tr>`
             : clientList.map(c => {
-                const sent = c.outboundSentThisMonth || 0;
-                const maxQuota = c.outboundAllowanceMonthly || 1000;
-                const pct = Math.min(Math.round((sent / maxQuota) * 100), 100);
-                const isQuotaFull = sent >= maxQuota;
                 const tierPrice = c.billingCycle === 'quarterly' ? 'Quarterly: ₹24,999 / qtr' : 'Monthly: ₹9,999 / mo';
                 const tierBadgeClass = c.billingCycle === 'quarterly' ? 'tier-quarterly' : 'tier-monthly';
                 return `
-        <tr class="${isQuotaFull ? 'row-quota-full' : ''}">
+        <tr>
           <td class="client-name">
             <strong>${c.businessName}</strong>
             <div class="client-slug">Slug: /restaurant/${c.slug}</div>
@@ -627,7 +612,7 @@ app.get('/agency', async (req, res) => {
         <div class="metric-lbl">Monthly / Quarterly Plans</div>
       </div>
       <div class="metric-card">
-        <div class="metric-val val-green">~${profitMargin}%</div>
+        <div class="metric-val val-green">100%</div>
         <div class="metric-lbl">Net Profit Margin</div>
       </div>
       <div class="metric-card">
