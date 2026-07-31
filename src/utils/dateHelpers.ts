@@ -31,12 +31,23 @@ export function dayAfterTomorrowIST(): string {
   return ist.toISOString().split('T')[0];
 }
 
-export function getNextNDaysIST(count: number): string[] {
-  const days: string[] = [];
+export function getNextNDaysIST(count: number): { dateStr: string; label: string; dayName: string }[] {
+  const days: { dateStr: string; label: string; dayName: string }[] = [];
+  const dayLabels = ['Today', 'Tomorrow'];
+
   for (let i = 0; i < count; i++) {
     const d = nowIST();
     d.setDate(d.getDate() + i);
-    days.push(d.toISOString().split('T')[0]);
+    const dateStr = d.toISOString().split('T')[0];
+    const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+    const formattedDate = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+    
+    let label = '';
+    if (i === 0) label = `Today · ${formattedDate}`;
+    else if (i === 1) label = `Tomorrow · ${formattedDate}`;
+    else label = `${dayName}, ${formattedDate}`;
+
+    days.push({ dateStr, label, dayName });
   }
   return days;
 }
@@ -84,19 +95,27 @@ export function isSunday(dateStr: string): boolean {
 }
 
 export function isWithinOperatingHours(time24: string, lunchHours: string, dinnerHours: string): boolean {
-  const [lunchStart, lunchEnd] = lunchHours.split('-');
-  const [dinnerStart, dinnerEnd] = dinnerHours.split('-');
-  return (time24 >= lunchStart && time24 <= lunchEnd) || (time24 >= dinnerStart && time24 <= dinnerEnd);
+  if (lunchHours && lunchHours.includes('-')) {
+    const [lunchStart, lunchEnd] = lunchHours.split('-');
+    if (time24 >= lunchStart && time24 <= lunchEnd) return true;
+  }
+  if (dinnerHours && dinnerHours.includes('-')) {
+    const [dinnerStart, dinnerEnd] = dinnerHours.split('-');
+    if (time24 >= dinnerStart && time24 <= dinnerEnd) return true;
+  }
+  return false;
 }
 
 export function getAvailableTimeSlots(date: string, lunchHours: string, dinnerHours: string): { period: string; slots: string[] }[] {
-  const [lunchStart, lunchEnd] = lunchHours.split('-');
-  const [dinnerStart, dinnerEnd] = dinnerHours.split('-');
-  
-  const generateSlots = (start: string, end: string) => {
+  const generateSlots = (startEnd: string) => {
+    if (!startEnd || !startEnd.includes('-')) return [];
+    const [start, end] = startEnd.split('-');
+    if (!start || !end || !start.includes(':') || !end.includes(':')) return [];
+    
     const slots = [];
     let [h, m] = start.split(':').map(Number);
     const [eh, em] = end.split(':').map(Number);
+    if (isNaN(h) || isNaN(m) || isNaN(eh) || isNaN(em)) return [];
     
     while (h < eh || (h === eh && m <= em)) {
       slots.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
@@ -109,25 +128,68 @@ export function getAvailableTimeSlots(date: string, lunchHours: string, dinnerHo
     return slots;
   };
   
-  let lunchSlots = generateSlots(lunchStart, lunchEnd);
-  let dinnerSlots = generateSlots(dinnerStart, dinnerEnd);
+  let lunchSlots = generateSlots(lunchHours);
+  let dinnerSlots = generateSlots(dinnerHours);
   
   if (date === todayIST()) {
     const nowTime = currentTimeIST();
     lunchSlots = lunchSlots.filter(s => s >= nowTime);
     dinnerSlots = dinnerSlots.filter(s => s >= nowTime);
   }
-  
-  return [
-    { period: 'lunch', slots: lunchSlots },
-    { period: 'dinner', slots: dinnerSlots }
-  ];
+
+  const result = [];
+  if (lunchSlots.length > 0) result.push({ period: 'Lunch', slots: lunchSlots });
+  if (dinnerSlots.length > 0) result.push({ period: 'Dinner', slots: dinnerSlots });
+  return result;
 }
 
 export function resolveRelativeDay(input: string): string | null {
+  return resolveDateInput(input);
+}
+
+export function resolveDateInput(input: string): string | null {
   const i = input.toLowerCase().trim();
   if (['today', 'aaj'].includes(i)) return todayIST();
   if (['tomorrow', 'kal'].includes(i)) return tomorrowIST();
   if (['day after', 'parson', 'parso', 'day after tomorrow'].includes(i)) return dayAfterTomorrowIST();
+
+  // Try parsing month names and numbers (e.g. "3rd august", "3 aug", "august 3")
+  const months: Record<string, number> = {
+    jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3,
+    may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7,
+    sep: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11
+  };
+
+  const dayMatch = i.match(/(\d{1,2})(st|nd|rd|th)?/);
+  const monthMatch = Object.keys(months).find(m => i.includes(m));
+
+  if (dayMatch && monthMatch) {
+    const dayNum = parseInt(dayMatch[1], 10);
+    const monthNum = months[monthMatch];
+    const now = nowIST();
+    let year = now.getFullYear();
+    const d = new Date(year, monthNum, dayNum);
+
+    if (d < now) {
+      d.setFullYear(year + 1);
+    }
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // Try parsing weekday names (e.g. "monday", "friday", "mon", "aug 3")
+  const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const targetDayIdx = weekdays.indexOf(i);
+  if (targetDayIdx !== -1) {
+    const now = nowIST();
+    const currentDayIdx = now.getDay();
+    let diff = targetDayIdx - currentDayIdx;
+    if (diff <= 0) diff += 7;
+    now.setDate(now.getDate() + diff);
+    return now.toISOString().split('T')[0];
+  }
+
   return null;
 }

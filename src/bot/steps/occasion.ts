@@ -1,8 +1,8 @@
 import type { WhatsAppMessageEvent } from '../../whatsapp/parser';
 import type { Restaurant, Conversation, StepData } from '../../db/schema';
-import { sendButtons } from '../../whatsapp/sender';
+import { sendButtons, sendList } from '../../whatsapp/sender';
 import { extractSlots } from '../../ai/slotExtractor';
-import { todayIST, currentTimeIST } from '../../utils/dateHelpers';
+import { todayIST, currentTimeIST, getNextNDaysIST } from '../../utils/dateHelpers';
 import { sendOccasionPrompt } from './guests';
 
 export async function handleOccasion(
@@ -41,13 +41,19 @@ export async function handleOccasion(
 }
 
 export async function sendDatePrompt(restaurant: Restaurant, phone: string) {
-  await sendButtons(restaurant, phone,
-    '📅 When would you like to dine?\n\nPick a date or type a day (e.g. "Friday", "Kal"):',
-    [
-      { id: 'date_today', title: 'Today' },
-      { id: 'date_tomorrow', title: 'Tomorrow' },
-      { id: 'date_dayafter', title: 'Day After' },
-    ],
+  const next5Days = getNextNDaysIST(5);
+  const rows = next5Days.map(d => ({
+    id: `date_${d.dateStr}`,
+    title: d.label.slice(0, 24),
+    description: `Reserve for ${d.label}`
+  }));
+
+  await sendList(
+    restaurant,
+    phone,
+    '📅 Select your dining date (up to 5 days in advance, or type any date e.g. "3rd August"):',
+    'Select Date',
+    [{ title: '📅 Next 5 Available Days', rows }],
     '📅 Select Date'
   );
 }

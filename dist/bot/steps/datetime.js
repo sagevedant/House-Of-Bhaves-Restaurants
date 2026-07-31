@@ -15,22 +15,29 @@ async function handleDateTimeDate(event, conversation, restaurant, stepData) {
         return { nextStep: 'datetime_time', stepData };
     }
     let date;
-    if (event.type === 'button_reply') {
+    if (event.type === 'list_reply' && event.rowId.startsWith('date_')) {
+        date = event.rowId.replace('date_', '');
+    }
+    else if (event.type === 'button_reply') {
         if (event.buttonId === 'date_today')
             date = (0, dateHelpers_1.todayIST)();
         if (event.buttonId === 'date_tomorrow')
             date = (0, dateHelpers_1.tomorrowIST)();
         if (event.buttonId === 'date_dayafter')
             date = (0, dateHelpers_1.dayAfterTomorrowIST)();
+        if (event.buttonId.startsWith('date_'))
+            date = event.buttonId.replace('date_', '');
     }
     else if (event.type === 'text') {
-        const resolved = (0, dateHelpers_1.resolveRelativeDay)(event.text);
+        const resolved = (0, dateHelpers_1.resolveDateInput)(event.text);
         if (resolved) {
             date = resolved;
         }
         else {
             const extracted = await (0, slotExtractor_1.extractSlots)(event.text, (0, dateHelpers_1.todayIST)(), (0, dateHelpers_1.currentTimeIST)());
-            date = extracted.date;
+            if (extracted.date) {
+                date = extracted.date;
+            }
         }
     }
     if (date) {

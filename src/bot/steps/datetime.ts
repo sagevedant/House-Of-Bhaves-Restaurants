@@ -2,7 +2,7 @@ import type { WhatsAppMessageEvent } from '../../whatsapp/parser';
 import type { Restaurant, Conversation, StepData } from '../../db/schema';
 import { sendButtons, sendList, sendText } from '../../whatsapp/sender';
 import { extractSlots } from '../../ai/slotExtractor';
-import { todayIST, currentTimeIST, tomorrowIST, dayAfterTomorrowIST, resolveRelativeDay, getDayName, getAvailableTimeSlots, formatDate, formatTime } from '../../utils/dateHelpers';
+import { todayIST, currentTimeIST, tomorrowIST, dayAfterTomorrowIST, resolveDateInput, getDayName, getAvailableTimeSlots, formatDate, formatTime } from '../../utils/dateHelpers';
 import { sendDatePrompt } from './occasion';
 
 export async function handleDateTimeDate(
@@ -20,17 +20,22 @@ export async function handleDateTimeDate(
 
   let date: string | undefined;
 
-  if (event.type === 'button_reply') {
+  if (event.type === 'list_reply' && event.rowId.startsWith('date_')) {
+    date = event.rowId.replace('date_', '');
+  } else if (event.type === 'button_reply') {
     if (event.buttonId === 'date_today') date = todayIST();
     if (event.buttonId === 'date_tomorrow') date = tomorrowIST();
     if (event.buttonId === 'date_dayafter') date = dayAfterTomorrowIST();
+    if (event.buttonId.startsWith('date_')) date = event.buttonId.replace('date_', '');
   } else if (event.type === 'text') {
-    const resolved = resolveRelativeDay(event.text);
+    const resolved = resolveDateInput(event.text);
     if (resolved) {
       date = resolved;
     } else {
       const extracted = await extractSlots(event.text, todayIST(), currentTimeIST());
-      date = extracted.date;
+      if (extracted.date) {
+        date = extracted.date;
+      }
     }
   }
 
