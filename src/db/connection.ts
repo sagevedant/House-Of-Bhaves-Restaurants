@@ -44,6 +44,8 @@ export async function initializeDatabase() {
       google_review_url TEXT DEFAULT 'https://maps.google.com',
       custom_welcome_text TEXT,
       custom_menu_text TEXT,
+      opening_hours_lunch TEXT DEFAULT '',
+      opening_hours_dinner TEXT DEFAULT '19:00-00:30',
       active INTEGER DEFAULT 1
     )
   `);
@@ -154,6 +156,8 @@ export async function initializeDatabase() {
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN next_monthly_reset_date TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN custom_welcome_text TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN custom_menu_text TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN opening_hours_lunch TEXT DEFAULT '';`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN opening_hours_dinner TEXT DEFAULT '19:00-00:30';`); } catch {}
   try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN custom_welcome_text TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN custom_menu_text TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE customers ADD COLUMN last_inbound_interaction TEXT;`); } catch {}

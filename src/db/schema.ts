@@ -18,6 +18,8 @@ export const clients = sqliteTable('clients', {
   googleReviewUrl: text('google_review_url').default('https://maps.google.com'),
   customWelcomeText: text('custom_welcome_text'),
   customMenuText: text('custom_menu_text'),
+  openingHoursLunch: text('opening_hours_lunch').default(''),
+  openingHoursDinner: text('opening_hours_dinner').default('19:00-00:30'),
   active: integer('active', { mode: 'boolean' }).default(true),
 });
 
@@ -28,15 +30,13 @@ export const customers = sqliteTable('customers', {
   customerName: text('customer_name'),
   birthday: text('birthday'), // MM-DD format, e.g. "07-28"
   anniversary: text('anniversary'), // MM-DD format
-  lastInboundInteraction: text('last_inbound_interaction'), // ISO timestamp
+  lastInboundInteraction: text('last_inbound_interaction'), // ISO string for 24h Meta Customer Service Window
   birthdayDiscountClaimedYear: integer('birthday_discount_claimed_year'),
   lastDinedAt: text('last_dined_at'), // YYYY-MM-DD
-  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString())
-}, (table) => {
-  return {
-    phoneClientIdx: index('idx_customers_phone_client').on(table.phoneNumber, table.clientId)
-  }
-});
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+}, (table) => ({
+  idxCustomersPhoneClient: index('idx_customers_phone_client').on(table.phoneNumber, table.clientId),
+}));
 
 export const bookings = sqliteTable('bookings', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -45,25 +45,27 @@ export const bookings = sqliteTable('bookings', {
   customerName: text('customer_name'),
   customerPhone: text('customer_phone').notNull(),
   guests: integer('guests').notNull().default(2),
-  occasion: text('occasion', { enum: ['casual', 'birthday', 'anniversary', 'corporate', 'party'] }).default('casual'),
-  bookingTimestamp: text('booking_timestamp').$defaultFn(() => new Date().toISOString()),
-  date: text('date').notNull(),
-  time: text('time').notNull(),
+  occasion: text('occasion', {
+    enum: ['casual', 'birthday', 'anniversary', 'corporate', 'party'],
+  }).default('casual'),
+  bookingTimestamp: text('booking_timestamp'), // ISO string
+  date: text('date').notNull(), // YYYY-MM-DD
+  time: text('time').notNull(), // HH:MM (24h)
   reservationCode: text('reservation_code').unique(),
-  status: text('status', { enum: ['booked', 'seated', 'completed', 'no_show', 'cancelled'] }).default('booked'),
+  status: text('status', {
+    enum: ['booked', 'seated', 'completed', 'no_show', 'cancelled'],
+  }).default('booked'),
   specialRequest: text('special_request'),
   reviewSent: integer('review_sent', { mode: 'boolean' }).default(false),
-  reviewScheduledAt: text('review_scheduled_at'), // ISO timestamp for 2-hr delay queue
-  createdAt: text('created_at').$defaultFn(() => new Date().toISOString())
-}, (table) => {
-  return {
-    statusIdx: index('idx_bookings_status').on(table.status),
-    dateIdx: index('idx_bookings_date').on(table.date)
-  }
-});
+  reviewScheduledAt: text('review_scheduled_at'), // ISO string for 2-hour delay queue
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+}, (table) => ({
+  idxBookingsStatus: index('idx_bookings_status').on(table.status),
+  idxBookingsDate: index('idx_bookings_date').on(table.date),
+}));
 
 // ----------------------------------------------------
-// LEGACY / SINGLE RESTAURANT SCHEMA (Maintained for full backward compatibility)
+// SINGLE RESTAURANT LAYER (Legacy / Backward Compatibility)
 // ----------------------------------------------------
 
 export const restaurants = sqliteTable('restaurants', {
@@ -90,17 +92,17 @@ export const conversations = sqliteTable('conversations', {
   phone: text('phone').notNull(),
   restaurantId: integer('restaurant_id').notNull().references(() => restaurants.id),
   customerName: text('customer_name'),
-  currentStep: text('current_step', { enum: ['entry','guests','occasion','datetime_date','datetime_time','confirm','finalized'] }).default('entry'),
-  stepData: text('step_data').default('{}'),
+  currentStep: text('current_step', {
+    enum: ['entry', 'guests', 'occasion', 'datetime_date', 'datetime_time', 'confirm', 'finalized'],
+  }).default('entry'),
+  stepData: text('step_data').default('{}'), // JSON string
   interruptedStep: text('interrupted_step'),
   birthdayDiscountClaimedYear: integer('birthday_discount_claimed_year'),
-  lastDinedAt: text('last_dined_at'),
-  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString())
-}, (table) => {
-  return {
-    phoneRestaurantIdx: index('idx_conversations_phone_restaurant').on(table.phone, table.restaurantId)
-  }
-});
+  lastDinedAt: text('last_dined_at'), // YYYY-MM-DD
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+}, (table) => ({
+  idxConversationsPhoneRestaurant: index('idx_conversations_phone_restaurant').on(table.phone, table.restaurantId),
+}));
 
 export const reservations = sqliteTable('reservations', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -108,22 +110,23 @@ export const reservations = sqliteTable('reservations', {
   customerName: text('customer_name'),
   customerPhone: text('customer_phone').notNull(),
   guests: integer('guests').notNull().default(2),
-  occasion: text('occasion', { enum: ['casual','birthday','anniversary','corporate','party'] }).default('casual'),
-  date: text('date').notNull(),
-  time: text('time').notNull(),
+  occasion: text('occasion', {
+    enum: ['casual', 'birthday', 'anniversary', 'corporate', 'party'],
+  }).default('casual'),
+  date: text('date').notNull(), // YYYY-MM-DD
+  time: text('time').notNull(), // HH:MM (24h)
   reservationCode: text('reservation_code').unique(),
-  stage: text('stage', { enum: ['booked','seated','reminded','completed','no_show','cancelled'] }).default('booked'),
+  stage: text('stage', {
+    enum: ['booked', 'seated', 'reminded', 'completed', 'no_show', 'cancelled'],
+  }).default('booked'),
   specialRequest: text('special_request'),
   reviewSent: integer('review_sent', { mode: 'boolean' }).default(false),
-  createdAt: text('created_at').$defaultFn(() => new Date().toISOString())
-}, (table) => {
-  return {
-    stageIdx: index('idx_reservations_stage').on(table.stage),
-    dateIdx: index('idx_reservations_date').on(table.date)
-  }
-});
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+}, (table) => ({
+  idxReservationsStage: index('idx_reservations_stage').on(table.stage),
+  idxReservationsDate: index('idx_reservations_date').on(table.date),
+}));
 
-// TypeScript Inferred Types
 export type Client = typeof clients.$inferSelect;
 export type InsertClient = typeof clients.$inferInsert;
 

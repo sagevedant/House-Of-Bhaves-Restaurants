@@ -19,6 +19,8 @@ exports.clients = (0, sqlite_core_1.sqliteTable)('clients', {
     googleReviewUrl: (0, sqlite_core_1.text)('google_review_url').default('https://maps.google.com'),
     customWelcomeText: (0, sqlite_core_1.text)('custom_welcome_text'),
     customMenuText: (0, sqlite_core_1.text)('custom_menu_text'),
+    openingHoursLunch: (0, sqlite_core_1.text)('opening_hours_lunch').default(''),
+    openingHoursDinner: (0, sqlite_core_1.text)('opening_hours_dinner').default('19:00-00:30'),
     active: (0, sqlite_core_1.integer)('active', { mode: 'boolean' }).default(true),
 });
 exports.customers = (0, sqlite_core_1.sqliteTable)('customers', {
@@ -28,15 +30,13 @@ exports.customers = (0, sqlite_core_1.sqliteTable)('customers', {
     customerName: (0, sqlite_core_1.text)('customer_name'),
     birthday: (0, sqlite_core_1.text)('birthday'), // MM-DD format, e.g. "07-28"
     anniversary: (0, sqlite_core_1.text)('anniversary'), // MM-DD format
-    lastInboundInteraction: (0, sqlite_core_1.text)('last_inbound_interaction'), // ISO timestamp
+    lastInboundInteraction: (0, sqlite_core_1.text)('last_inbound_interaction'), // ISO string for 24h Meta Customer Service Window
     birthdayDiscountClaimedYear: (0, sqlite_core_1.integer)('birthday_discount_claimed_year'),
     lastDinedAt: (0, sqlite_core_1.text)('last_dined_at'), // YYYY-MM-DD
-    updatedAt: (0, sqlite_core_1.text)('updated_at').$defaultFn(() => new Date().toISOString())
-}, (table) => {
-    return {
-        phoneClientIdx: (0, sqlite_core_1.index)('idx_customers_phone_client').on(table.phoneNumber, table.clientId)
-    };
-});
+    updatedAt: (0, sqlite_core_1.text)('updated_at').$defaultFn(() => new Date().toISOString()),
+}, (table) => ({
+    idxCustomersPhoneClient: (0, sqlite_core_1.index)('idx_customers_phone_client').on(table.phoneNumber, table.clientId),
+}));
 exports.bookings = (0, sqlite_core_1.sqliteTable)('bookings', {
     id: (0, sqlite_core_1.integer)('id').primaryKey({ autoIncrement: true }),
     clientId: (0, sqlite_core_1.integer)('client_id').notNull().references(() => exports.clients.id),
@@ -44,24 +44,26 @@ exports.bookings = (0, sqlite_core_1.sqliteTable)('bookings', {
     customerName: (0, sqlite_core_1.text)('customer_name'),
     customerPhone: (0, sqlite_core_1.text)('customer_phone').notNull(),
     guests: (0, sqlite_core_1.integer)('guests').notNull().default(2),
-    occasion: (0, sqlite_core_1.text)('occasion', { enum: ['casual', 'birthday', 'anniversary', 'corporate', 'party'] }).default('casual'),
-    bookingTimestamp: (0, sqlite_core_1.text)('booking_timestamp').$defaultFn(() => new Date().toISOString()),
-    date: (0, sqlite_core_1.text)('date').notNull(),
-    time: (0, sqlite_core_1.text)('time').notNull(),
+    occasion: (0, sqlite_core_1.text)('occasion', {
+        enum: ['casual', 'birthday', 'anniversary', 'corporate', 'party'],
+    }).default('casual'),
+    bookingTimestamp: (0, sqlite_core_1.text)('booking_timestamp'), // ISO string
+    date: (0, sqlite_core_1.text)('date').notNull(), // YYYY-MM-DD
+    time: (0, sqlite_core_1.text)('time').notNull(), // HH:MM (24h)
     reservationCode: (0, sqlite_core_1.text)('reservation_code').unique(),
-    status: (0, sqlite_core_1.text)('status', { enum: ['booked', 'seated', 'completed', 'no_show', 'cancelled'] }).default('booked'),
+    status: (0, sqlite_core_1.text)('status', {
+        enum: ['booked', 'seated', 'completed', 'no_show', 'cancelled'],
+    }).default('booked'),
     specialRequest: (0, sqlite_core_1.text)('special_request'),
     reviewSent: (0, sqlite_core_1.integer)('review_sent', { mode: 'boolean' }).default(false),
-    reviewScheduledAt: (0, sqlite_core_1.text)('review_scheduled_at'), // ISO timestamp for 2-hr delay queue
-    createdAt: (0, sqlite_core_1.text)('created_at').$defaultFn(() => new Date().toISOString())
-}, (table) => {
-    return {
-        statusIdx: (0, sqlite_core_1.index)('idx_bookings_status').on(table.status),
-        dateIdx: (0, sqlite_core_1.index)('idx_bookings_date').on(table.date)
-    };
-});
+    reviewScheduledAt: (0, sqlite_core_1.text)('review_scheduled_at'), // ISO string for 2-hour delay queue
+    createdAt: (0, sqlite_core_1.text)('created_at').$defaultFn(() => new Date().toISOString()),
+}, (table) => ({
+    idxBookingsStatus: (0, sqlite_core_1.index)('idx_bookings_status').on(table.status),
+    idxBookingsDate: (0, sqlite_core_1.index)('idx_bookings_date').on(table.date),
+}));
 // ----------------------------------------------------
-// LEGACY / SINGLE RESTAURANT SCHEMA (Maintained for full backward compatibility)
+// SINGLE RESTAURANT LAYER (Legacy / Backward Compatibility)
 // ----------------------------------------------------
 exports.restaurants = (0, sqlite_core_1.sqliteTable)('restaurants', {
     id: (0, sqlite_core_1.integer)('id').primaryKey({ autoIncrement: true }),
@@ -86,35 +88,37 @@ exports.conversations = (0, sqlite_core_1.sqliteTable)('conversations', {
     phone: (0, sqlite_core_1.text)('phone').notNull(),
     restaurantId: (0, sqlite_core_1.integer)('restaurant_id').notNull().references(() => exports.restaurants.id),
     customerName: (0, sqlite_core_1.text)('customer_name'),
-    currentStep: (0, sqlite_core_1.text)('current_step', { enum: ['entry', 'guests', 'occasion', 'datetime_date', 'datetime_time', 'confirm', 'finalized'] }).default('entry'),
-    stepData: (0, sqlite_core_1.text)('step_data').default('{}'),
+    currentStep: (0, sqlite_core_1.text)('current_step', {
+        enum: ['entry', 'guests', 'occasion', 'datetime_date', 'datetime_time', 'confirm', 'finalized'],
+    }).default('entry'),
+    stepData: (0, sqlite_core_1.text)('step_data').default('{}'), // JSON string
     interruptedStep: (0, sqlite_core_1.text)('interrupted_step'),
     birthdayDiscountClaimedYear: (0, sqlite_core_1.integer)('birthday_discount_claimed_year'),
-    lastDinedAt: (0, sqlite_core_1.text)('last_dined_at'),
-    updatedAt: (0, sqlite_core_1.text)('updated_at').$defaultFn(() => new Date().toISOString())
-}, (table) => {
-    return {
-        phoneRestaurantIdx: (0, sqlite_core_1.index)('idx_conversations_phone_restaurant').on(table.phone, table.restaurantId)
-    };
-});
+    lastDinedAt: (0, sqlite_core_1.text)('last_dined_at'), // YYYY-MM-DD
+    updatedAt: (0, sqlite_core_1.text)('updated_at').$defaultFn(() => new Date().toISOString()),
+}, (table) => ({
+    idxConversationsPhoneRestaurant: (0, sqlite_core_1.index)('idx_conversations_phone_restaurant').on(table.phone, table.restaurantId),
+}));
 exports.reservations = (0, sqlite_core_1.sqliteTable)('reservations', {
     id: (0, sqlite_core_1.integer)('id').primaryKey({ autoIncrement: true }),
     restaurantId: (0, sqlite_core_1.integer)('restaurant_id').notNull().references(() => exports.restaurants.id),
     customerName: (0, sqlite_core_1.text)('customer_name'),
     customerPhone: (0, sqlite_core_1.text)('customer_phone').notNull(),
     guests: (0, sqlite_core_1.integer)('guests').notNull().default(2),
-    occasion: (0, sqlite_core_1.text)('occasion', { enum: ['casual', 'birthday', 'anniversary', 'corporate', 'party'] }).default('casual'),
-    date: (0, sqlite_core_1.text)('date').notNull(),
-    time: (0, sqlite_core_1.text)('time').notNull(),
+    occasion: (0, sqlite_core_1.text)('occasion', {
+        enum: ['casual', 'birthday', 'anniversary', 'corporate', 'party'],
+    }).default('casual'),
+    date: (0, sqlite_core_1.text)('date').notNull(), // YYYY-MM-DD
+    time: (0, sqlite_core_1.text)('time').notNull(), // HH:MM (24h)
     reservationCode: (0, sqlite_core_1.text)('reservation_code').unique(),
-    stage: (0, sqlite_core_1.text)('stage', { enum: ['booked', 'seated', 'reminded', 'completed', 'no_show', 'cancelled'] }).default('booked'),
+    stage: (0, sqlite_core_1.text)('stage', {
+        enum: ['booked', 'seated', 'reminded', 'completed', 'no_show', 'cancelled'],
+    }).default('booked'),
     specialRequest: (0, sqlite_core_1.text)('special_request'),
     reviewSent: (0, sqlite_core_1.integer)('review_sent', { mode: 'boolean' }).default(false),
-    createdAt: (0, sqlite_core_1.text)('created_at').$defaultFn(() => new Date().toISOString())
-}, (table) => {
-    return {
-        stageIdx: (0, sqlite_core_1.index)('idx_reservations_stage').on(table.stage),
-        dateIdx: (0, sqlite_core_1.index)('idx_reservations_date').on(table.date)
-    };
-});
+    createdAt: (0, sqlite_core_1.text)('created_at').$defaultFn(() => new Date().toISOString()),
+}, (table) => ({
+    idxReservationsStage: (0, sqlite_core_1.index)('idx_reservations_stage').on(table.stage),
+    idxReservationsDate: (0, sqlite_core_1.index)('idx_reservations_date').on(table.date),
+}));
 //# sourceMappingURL=schema.js.map

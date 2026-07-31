@@ -243,6 +243,44 @@ export declare const clients: import("drizzle-orm/sqlite-core").SQLiteTableWithC
         }, {}, {
             length: number | undefined;
         }>;
+        openingHoursLunch: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "opening_hours_lunch";
+            tableName: "clients";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        openingHoursDinner: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "opening_hours_dinner";
+            tableName: "clients";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
         active: import("drizzle-orm/sqlite-core").SQLiteColumn<{
             name: "active";
             tableName: "clients";
@@ -591,10 +629,10 @@ export declare const bookings: import("drizzle-orm/sqlite-core").SQLiteTableWith
             data: string;
             driverParam: string;
             notNull: false;
-            hasDefault: true;
+            hasDefault: false;
             isPrimaryKey: false;
             isAutoincrement: false;
-            hasRuntimeDefault: true;
+            hasRuntimeDefault: false;
             enumValues: [string, ...string[]];
             baseColumn: never;
             identity: undefined;

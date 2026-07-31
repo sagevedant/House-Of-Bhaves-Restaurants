@@ -80,6 +80,8 @@ async function initializeDatabase() {
       google_review_url TEXT DEFAULT 'https://maps.google.com',
       custom_welcome_text TEXT,
       custom_menu_text TEXT,
+      opening_hours_lunch TEXT DEFAULT '',
+      opening_hours_dinner TEXT DEFAULT '19:00-00:30',
       active INTEGER DEFAULT 1
     )
   `);
@@ -198,6 +200,14 @@ async function initializeDatabase() {
     catch { }
     try {
         await exports.sqlite.execute(`ALTER TABLE clients ADD COLUMN custom_menu_text TEXT;`);
+    }
+    catch { }
+    try {
+        await exports.sqlite.execute(`ALTER TABLE clients ADD COLUMN opening_hours_lunch TEXT DEFAULT '';`);
+    }
+    catch { }
+    try {
+        await exports.sqlite.execute(`ALTER TABLE clients ADD COLUMN opening_hours_dinner TEXT DEFAULT '19:00-00:30';`);
     }
     catch { }
     try {
