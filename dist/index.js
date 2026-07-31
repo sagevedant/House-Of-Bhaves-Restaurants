@@ -277,17 +277,6 @@ app.get('/onboard', (req, res) => {
     }
     .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(245, 158, 11, 0.35); }
     .note { font-size: 11px; color: #78716C; margin-top: 6px; }
-    .pricing-box {
-      background: rgba(23, 21, 18, 0.8);
-      border: 1px dashed #3D372E;
-      padding: 16px 20px;
-      border-radius: 14px;
-      margin-bottom: 28px;
-      font-size: 13px;
-      line-height: 1.6;
-      color: #A8A29E;
-    }
-    .pricing-box strong { color: #F59E0B; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -296,12 +285,6 @@ app.get('/onboard', (req, res) => {
       <div class="brand-pill">House of Bhaves Agency</div>
       <h1>🍽️ Onboard Restaurant Client</h1>
       <p>Configure WhatsApp Credentials, Custom Greeting, Cuisines & Seating Setup</p>
-    </div>
-
-    <div class="pricing-box">
-      💰 <strong>WhatsApp Automation Package:</strong><br>
-      • <strong>Monthly Plan:</strong> ₹9,999 / month (Unlimited 24/7 WhatsApp Booking Bot + Same-Day Reviews)<br>
-      • <strong>Quarterly Bundle:</strong> ₹24,999 / quarter (Save ₹4,998)
     </div>
 
     <form action="/api/agency/onboard" method="POST">
@@ -624,7 +607,7 @@ app.get('/agency', async (req, res) => {
     .meta-cost { font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 700; color: #F3EFE6; }
     .cost-note { font-size: 10px; color: #78716C; }
     .btn-view-logbook {
-      background: #1C1917;
+      background: #1C1B18;
       border: 1px solid #3E3932;
       color: #F59E0B;
       padding: 8px 14px;
