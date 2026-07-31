@@ -6,7 +6,7 @@ import { restaurants, reservations, conversations, clients, customers, bookings 
 import webhookRouter from './whatsapp/webhook';
 import { sendToMakeWebhook } from './services/makeIntegration';
 import { eq, desc, and } from 'drizzle-orm';
-import { startScheduler, runReviewRequestCron } from './scheduler/cron';
+import { startScheduler } from './scheduler/cron';
 import { processPendingReviewQueue, scheduleSameDayReview } from './services/reviewEngine';
 
 const app = express();
@@ -102,51 +102,48 @@ app.post('/api/reservations/status', async (req, res) => {
     if (!reservationId || !status) {
       return res.status(400).json({ error: 'Missing reservationId or status' });
     }
-    
-    const [updated] = await db.update(reservations)
+
+    // Update in bookings table
+    const [updatedBooking] = await db.update(bookings)
+      .set({ status })
+      .where(eq(bookings.id, reservationId))
+      .returning();
+
+    // Update in legacy reservations table
+    const [updatedRes] = await db.update(reservations)
       .set({ stage: status })
       .where(eq(reservations.id, reservationId))
       .returning();
+
+    const updated = updatedBooking || updatedRes;
       
     if (updated) {
       const currentYear = new Date().getFullYear();
       const today = new Date().toISOString().split('T')[0];
+      const phone = (updated as any).customerPhone || (updated as any).phone;
+      const restId = (updated as any).clientId || (updated as any).restaurantId;
 
-      // 🛡️ Once-Per-Year Birthday Guardrail & Last Dined Tracker
       if (status === 'seated' || status === 'completed') {
         const updates: any = { lastDinedAt: today };
         if (updated.occasion === 'birthday') {
           updates.birthdayDiscountClaimedYear = currentYear;
-          console.log(`🛡️ [Guardrail] Stamped 2026 birthday offer claimed for guest ${updated.customerPhone}`);
         }
 
-        await db
-          .update(conversations)
-          .set(updates)
-          .where(
-            and(
-              eq(conversations.phone, updated.customerPhone),
-              eq(conversations.restaurantId, updated.restaurantId)
-            )
-          );
+        if (phone && restId) {
+          await db
+            .update(conversations)
+            .set(updates)
+            .where(
+              and(
+                eq(conversations.phone, phone),
+                eq(conversations.restaurantId, restId)
+              )
+            );
+        }
 
         // Schedule 2-Hour Asynchronous Same-Day Review Delay Queue
         await scheduleSameDayReview(updated.id, 120);
       }
-
-      await sendToMakeWebhook({
-        event: 'status_updated',
-        reservationId: updated.id,
-        reservationCode: updated.reservationCode,
-        customerName: updated.customerName,
-        customerPhone: updated.customerPhone,
-        guests: updated.guests,
-        occasion: updated.occasion,
-        date: updated.date,
-        time: updated.time,
-        stage: updated.stage,
-        timestamp: new Date().toISOString(),
-      });
     }
       
     res.json({ success: true, reservation: updated });
@@ -163,7 +160,7 @@ app.post('/api/agency/trigger-review-queue', async (req, res) => {
 });
 
 // ----------------------------------------------------
-// 📝 RESTAURANT CLIENT ONBOARDING PORTAL (GET /onboard)
+// 📝 LUXURY GRAINY-TEXTURED ONBOARDING PORTAL (GET /onboard)
 // ----------------------------------------------------
 app.get('/onboard', (req, res) => {
   res.send(`
@@ -172,91 +169,121 @@ app.get('/onboard', (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Onboard New Restaurant | House of Bhaves Agency</title>
+  <title>Onboard Restaurant Client | House of Bhaves Agency</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Instrument Sans', -apple-system, sans-serif;
-      background: #0D0C0B;
+      background: #0B0A09;
       color: #F3EFE6;
-      padding: 32px 20px;
+      padding: 48px 20px;
       min-height: 100vh;
+      background-image: radial-gradient(circle at 50% 0%, #26211A 0%, #0B0A09 70%);
+      position: relative;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noiseFilter"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.045"/></svg>');
+      pointer-events: none;
+      z-index: 999;
     }
     .form-container {
-      max-width: 680px;
+      max-width: 720px;
       margin: 0 auto;
-      background: #171614;
-      border: 2px solid #322E28;
-      border-radius: 20px;
-      padding: 36px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+      background: #141311;
+      border: 1.5px solid #2D2923;
+      border-radius: 24px;
+      padding: 44px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05);
     }
-    .form-header { text-align: center; margin-bottom: 28px; }
+    .brand-pill {
+      display: inline-block;
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: #F59E0B;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 30px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+    }
+    .form-header { text-align: center; margin-bottom: 32px; }
     .form-header h1 {
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 26px;
-      color: #F59E0B;
+      font-size: 28px;
+      color: #F3EFE6;
       font-weight: 700;
+      letter-spacing: -0.5px;
     }
-    .form-header p { color: #A8A29E; font-size: 14px; margin-top: 6px; }
-    .form-group { margin-bottom: 20px; }
+    .form-header p { color: #A8A29E; font-size: 14px; margin-top: 8px; font-weight: 500; }
+    .form-group { margin-bottom: 22px; }
     label {
       display: block;
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
-      color: #F3EFE6;
+      color: #D6D3D1;
       margin-bottom: 8px;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.8px;
     }
     input, select, textarea {
       width: 100%;
       background: #0E0D0C;
-      border: 1.5px solid #3A352E;
+      border: 1.5px solid #2D2923;
       color: #F3EFE6;
-      padding: 14px 16px;
-      border-radius: 10px;
-      font-size: 15px;
+      padding: 14px 18px;
+      border-radius: 12px;
+      font-size: 14px;
       font-family: inherit;
+      transition: all 0.2s ease;
     }
-    textarea { height: 100px; resize: vertical; }
-    input:focus, select:focus, textarea:focus { border-color: #F59E0B; outline: none; }
-    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    textarea { height: 95px; resize: vertical; line-height: 1.5; }
+    input:focus, select:focus, textarea:focus { border-color: #F59E0B; outline: none; background: #12110F; box-shadow: 0 0 15px rgba(245, 158, 11, 0.15); }
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
     .submit-btn {
       width: 100%;
-      background: #F59E0B;
+      background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
       border: none;
       color: #0D0C0B;
-      padding: 16px;
-      border-radius: 12px;
+      padding: 18px;
+      border-radius: 14px;
       font-family: 'Space Grotesk', sans-serif;
       font-size: 16px;
       font-weight: 700;
       cursor: pointer;
-      margin-top: 10px;
+      margin-top: 14px;
+      box-shadow: 0 6px 20px rgba(245, 158, 11, 0.25);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
-    .submit-btn:hover { background: #D97706; }
-    .note { font-size: 12px; color: #78716C; margin-top: 6px; }
+    .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(245, 158, 11, 0.35); }
+    .note { font-size: 11px; color: #78716C; margin-top: 6px; }
     .pricing-box {
-      background: #11100E;
-      border: 1px dashed #F59E0B;
-      padding: 14px;
-      border-radius: 10px;
-      margin-bottom: 20px;
+      background: rgba(23, 21, 18, 0.8);
+      border: 1px dashed #3D372E;
+      padding: 16px 20px;
+      border-radius: 14px;
+      margin-bottom: 28px;
       font-size: 13px;
-      line-height: 1.5;
+      line-height: 1.6;
+      color: #A8A29E;
     }
-    .pricing-box strong { color: #F59E0B; }
+    .pricing-box strong { color: #F59E0B; font-weight: 700; }
   </style>
 </head>
 <body>
   <div class="form-container">
     <div class="form-header">
-      <h1>🍽️ Onboard New Restaurant Client</h1>
+      <div class="brand-pill">House of Bhaves Agency</div>
+      <h1>🍽️ Onboard Restaurant Client</h1>
       <p>Configure WhatsApp Credentials, Custom Greeting, Cuisines & Seating Setup</p>
     </div>
 
@@ -269,13 +296,13 @@ app.get('/onboard', (req, res) => {
     <form action="/api/agency/onboard" method="POST">
       <div class="form-group">
         <label>Restaurant Business Name *</label>
-        <input type="text" name="businessName" placeholder="e.g. Spice Factory Rooftop & Lounge" required>
+        <input type="text" name="businessName" placeholder="e.g. Big Bang Community (BBC)" required>
       </div>
 
       <div class="row-2">
         <div class="form-group">
           <label>Custom URL Slug *</label>
-          <input type="text" name="slug" placeholder="e.g. spice-factory-baner" required>
+          <input type="text" name="slug" placeholder="e.g. big-bang-community" required>
           <div class="note">Generates /restaurant/:slug logbook</div>
         </div>
 
@@ -290,45 +317,45 @@ app.get('/onboard', (req, res) => {
 
       <div class="form-group">
         <label>Custom Bot Welcome Greeting (Optional)</label>
-        <textarea name="customWelcomeText" placeholder="Welcome to Paasha Rooftop! Enjoy 360-degree skyline views & authentic North Indian delicacies. Tap below to book your table!"></textarea>
+        <textarea name="customWelcomeText" placeholder="e.g. Welcome to Big Bang Community (BBC)! Relaxed outdoor seating, live music & sports screenings. Tap below to book your table!"></textarea>
       </div>
 
       <div class="form-group">
         <label>Custom Cuisines & Chef Specials Guide (Optional)</label>
-        <textarea name="customMenuText" placeholder="🔥 North Indian & Tandoor: Butter Chicken, Dal Makhani&#10;🥟 Asian & Dim Sum: Truffle Edamame Dim Sum&#10;🍕 Wood-fired Pizza: Truffle Mushroom Pizza"></textarea>
+        <textarea name="customMenuText" placeholder="e.g. 🥟 Dumplings & Dim Sums&#10;🍝 Homestyle Rice & Pastas&#10;🍗 Crispy Korean Chicken&#10;🍹 Cold Brew Shakerato & Craft Beers"></textarea>
       </div>
 
       <div class="form-group">
         <label>Restaurant Address & Landmark</label>
-        <input type="text" name="address" placeholder="Baner Road, Pune 411045" value="Baner Road, Pune 411045">
+        <input type="text" name="address" placeholder="e.g. Royale Heritage Mall, NIBM Road, Pune">
       </div>
 
       <div class="row-2">
         <div class="form-group">
           <label>Meta WhatsApp Phone Number ID *</label>
-          <input type="text" name="whatsappPhoneNumberId" placeholder="1167895203082852" required>
+          <input type="text" name="whatsappPhoneNumberId" placeholder="e.g. 1167895203082852" required>
         </div>
 
         <div class="form-group">
           <label>Reservation Code Prefix *</label>
-          <input type="text" name="prefix" placeholder="SPF" value="SPF" required>
+          <input type="text" name="prefix" placeholder="e.g. BBC" required>
         </div>
       </div>
 
       <div class="form-group">
         <label>Meta Permanent Access Token *</label>
-        <input type="text" name="metaAccessToken" placeholder="EAA4bXmG..." required>
+        <input type="text" name="metaAccessToken" placeholder="e.g. EAA4bXmG..." required>
       </div>
 
       <div class="row-2">
         <div class="form-group">
           <label>Manager WhatsApp Phone</label>
-          <input type="text" name="managerPhone" placeholder="919699533441" value="919699533441">
+          <input type="text" name="managerPhone" placeholder="e.g. 919511673214">
         </div>
 
         <div class="form-group">
           <label>Google Review URL</label>
-          <input type="text" name="googleReviewUrl" placeholder="https://maps.google.com" value="https://maps.google.com">
+          <input type="text" name="googleReviewUrl" placeholder="e.g. https://maps.google.com/?q=Big+Bang+Community">
         </div>
       </div>
 
@@ -388,7 +415,7 @@ app.post('/api/agency/onboard', async (req, res) => {
     await db.insert(restaurants).values({
       name: businessName,
       slug: cleanSlug,
-      address: address || 'Baner Road, Pune',
+      address: address || 'Pune',
       whatsappPhoneNumberId,
       metaAccessToken,
       prefix: prefix || 'HOB',
@@ -424,7 +451,6 @@ app.get('/agency', async (req, res) => {
     
     // Pure Automation Meta Cost = ₹0.00 (Customer Service Window)
     const totalMetaCost = 0;
-    const netProfit = mrr;
     const profitMargin = mrr > 0 ? 100 : 100;
 
     const clientRowsHtml = clientList.length === 0
@@ -479,6 +505,16 @@ app.get('/agency', async (req, res) => {
       color: #F3EFE6;
       padding: 32px;
       min-height: 100vh;
+      background-image: radial-gradient(circle at 50% 0%, #26211A 0%, #0B0A09 70%);
+      position: relative;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noiseFilter"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.045"/></svg>');
+      pointer-events: none;
+      z-index: 999;
     }
     .container { max-width: 1320px; margin: 0 auto; }
     .header-banner {
@@ -602,7 +638,7 @@ app.get('/agency', async (req, res) => {
     .meta-cost { font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 700; color: #F3EFE6; }
     .cost-note { font-size: 10px; color: #78716C; }
     .btn-view-logbook {
-      background: #1C1B18;
+      background: #1C1917;
       border: 1px solid #3E3932;
       color: #F59E0B;
       padding: 8px 14px;
@@ -695,28 +731,64 @@ app.get('/agency', async (req, res) => {
   }
 });
 
-// Multi-tenant slug route & fallback
+// Multi-tenant slug route & fallback (Checks both clients & restaurants tables safely)
 app.get('/restaurant/:slug?', async (req, res) => {
   try {
-    const slug = (req.params as any).slug || 'hob-restaurant';
+    const targetSlug = (req.params as any).slug || 'hob-restaurant';
     
-    let restaurantList = await db.select().from(restaurants).where(eq(restaurants.slug, slug)).limit(1);
-    if (restaurantList.length === 0) {
-      restaurantList = await db.select().from(restaurants).limit(1);
-    }
-    
-    const restaurant = restaurantList[0] || {
-      name: 'House of Bhaves Rooftop & Lounge (HOB)',
-      slug: 'hob-restaurant',
-      address: 'Baner Road, Pune',
-      prefix: 'HOB'
-    };
+    // Check clients table first
+    let clientMatches = await db.select().from(clients).where(eq(clients.slug, targetSlug)).limit(1);
+    let restaurantMatches = await db.select().from(restaurants).where(eq(restaurants.slug, targetSlug)).limit(1);
 
-    const allRes = await db
-      .select()
-      .from(reservations)
-      .where(eq(reservations.restaurantId, restaurant.id))
-      .orderBy(desc(reservations.createdAt));
+    const client = clientMatches[0];
+    const restaurant = restaurantMatches[0];
+
+    const displayName = client?.businessName || restaurant?.name || 'Big Bang Community (BBC)';
+    const displaySlug = client?.slug || restaurant?.slug || targetSlug;
+    const clientId = client?.id;
+    const restaurantId = restaurant?.id || 1;
+
+    // Query bookings / reservations cleanly
+    let allRes: any[] = [];
+    if (clientId) {
+      const clientBookings = await db
+        .select()
+        .from(bookings)
+        .where(eq(bookings.clientId, clientId))
+        .orderBy(desc(bookings.createdAt));
+      
+      allRes = clientBookings.map(b => ({
+        id: b.id,
+        customerName: b.customerName || 'Guest',
+        customerPhone: b.customerPhone,
+        guests: b.guests,
+        occasion: b.occasion,
+        date: b.date,
+        time: b.time,
+        reservationCode: b.reservationCode || 'BBC-RES-1001',
+        stage: b.status || 'booked',
+      }));
+    }
+
+    if (allRes.length === 0 && restaurantId) {
+      const restReservations = await db
+        .select()
+        .from(reservations)
+        .where(eq(reservations.restaurantId, restaurantId))
+        .orderBy(desc(reservations.createdAt));
+
+      allRes = restReservations.map(r => ({
+        id: r.id,
+        customerName: r.customerName || 'Guest',
+        customerPhone: r.customerPhone,
+        guests: r.guests,
+        occasion: r.occasion,
+        date: r.date,
+        time: r.time,
+        reservationCode: r.reservationCode || 'RES-1001',
+        stage: r.stage || 'booked',
+      }));
+    }
     
     const totalReservations = allRes.filter(r => r.stage !== 'cancelled').length;
     const seatedCount = allRes.filter(r => r.stage === 'seated').length;
@@ -812,8 +884,8 @@ app.get('/restaurant/:slug?', async (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${restaurant.name} | Hostess Ledger</title>
-  <meta name="description" content="Private Booking Ledger for ${restaurant.name}">
+  <title>${displayName} | Hostess Ledger</title>
+  <meta name="description" content="Private Booking Ledger for ${displayName}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1029,8 +1101,8 @@ app.get('/restaurant/:slug?', async (req, res) => {
   <div class="container">
     <div class="header-card">
       <div class="restaurant-title">
-        <h1>${restaurant.name}</h1>
-        <p>Hostess Front-Desk Ledger • URL Slug: /restaurant/${restaurant.slug}</p>
+        <h1>${displayName}</h1>
+        <p>Hostess Front-Desk Ledger • URL Slug: /restaurant/${displaySlug}</p>
       </div>
       <div class="header-right">
         <div class="live-badge">
