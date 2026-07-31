@@ -32,12 +32,12 @@ async function handleOccasion(event, conversation, restaurant, stepData) {
     return { nextStep: 'occasion', stepData };
 }
 async function sendDatePrompt(restaurant, phone) {
-    const next5Days = (0, dateHelpers_1.getNextNDaysIST)(5);
-    const rows = next5Days.map(d => ({
+    const next7Days = (0, dateHelpers_1.getNextNDaysIST)(7);
+    const rows = next7Days.map(d => ({
         id: `date_${d.dateStr}`,
         title: d.label.slice(0, 24),
         description: `Reserve for ${d.label}`
     }));
-    await (0, sender_1.sendList)(restaurant, phone, '📅 Select your dining date (up to 5 days in advance, or type any date e.g. "3rd August"):', 'Select Date', [{ title: '📅 Next 5 Available Days', rows }], '📅 Select Date');
+    await (0, sender_1.sendList)(restaurant, phone, '📅 Select your dining date (up to 7 days in advance, or type any date e.g. "3rd August"):', 'Select Date', [{ title: '📅 Next 7 Available Days', rows }], '📅 Select Date');
 }
 //# sourceMappingURL=occasion.js.map

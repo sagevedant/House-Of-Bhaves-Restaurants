@@ -41,8 +41,8 @@ export async function handleOccasion(
 }
 
 export async function sendDatePrompt(restaurant: Restaurant, phone: string) {
-  const next5Days = getNextNDaysIST(5);
-  const rows = next5Days.map(d => ({
+  const next7Days = getNextNDaysIST(7);
+  const rows = next7Days.map(d => ({
     id: `date_${d.dateStr}`,
     title: d.label.slice(0, 24),
     description: `Reserve for ${d.label}`
@@ -51,9 +51,9 @@ export async function sendDatePrompt(restaurant: Restaurant, phone: string) {
   await sendList(
     restaurant,
     phone,
-    '📅 Select your dining date (up to 5 days in advance, or type any date e.g. "3rd August"):',
+    '📅 Select your dining date (up to 7 days in advance, or type any date e.g. "3rd August"):',
     'Select Date',
-    [{ title: '📅 Next 5 Available Days', rows }],
+    [{ title: '📅 Next 7 Available Days', rows }],
     '📅 Select Date'
   );
 }

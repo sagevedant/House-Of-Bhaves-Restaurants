@@ -47,7 +47,6 @@ function dayAfterTomorrowIST() {
 }
 function getNextNDaysIST(count) {
     const days = [];
-    const dayLabels = ['Today', 'Tomorrow'];
     for (let i = 0; i < count; i++) {
         const d = nowIST();
         d.setDate(d.getDate() + i);
@@ -121,11 +120,16 @@ function getAvailableTimeSlots(date, lunchHours, dinnerHours) {
             return [];
         const slots = [];
         let [h, m] = start.split(':').map(Number);
-        const [eh, em] = end.split(':').map(Number);
+        let [eh, em] = end.split(':').map(Number);
         if (isNaN(h) || isNaN(m) || isNaN(eh) || isNaN(em))
             return [];
+        // Handle midnight wrap-around (e.g. 19:00 to 00:30 or 01:30 AM)
+        if (eh < h || (eh === h && em < m)) {
+            eh += 24;
+        }
         while (h < eh || (h === eh && m <= em)) {
-            slots.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+            const displayH = h >= 24 ? h - 24 : h;
+            slots.push(`${displayH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
             m += 30;
             if (m >= 60) {
                 h += 1;
