@@ -267,13 +267,13 @@ app.get('/onboard', (req, res) => {
   <div class="form-container">
     <div class="form-header">
       <h1>🍽️ Onboard New Restaurant Client</h1>
-      <p>Configure WhatsApp Credentials, Custom URL Slug & Itemized Commercial Offer</p>
+      <p>Pure WhatsApp Booking Automation & Same-Day Review Engine Setup</p>
     </div>
 
     <div class="pricing-box">
-      💰 <strong>Itemized Commercial Plan Breakdown:</strong><br>
-      • <strong>Core Automation Package:</strong> ₹9,999/mo (Unlimited Inbound Booking Bot + Same-Day Reviews)<br>
-      • <strong>Outbound Marketing Add-on:</strong> +₹5,000/mo (Monthly Plan) OR +₹9,999/qtr (Quarterly Bundle - Save ₹5,001). Capped at 1,000 msgs/mo.
+      💰 <strong>WhatsApp Automation Package:</strong><br>
+      • <strong>Monthly Plan:</strong> ₹9,999 / month (Unlimited 24/7 WhatsApp Booking Bot + Same-Day Reviews)<br>
+      • <strong>Quarterly Bundle:</strong> ₹24,999 / quarter (Save ₹4,998)
     </div>
 
     <form action="/api/agency/onboard" method="POST">
@@ -290,10 +290,10 @@ app.get('/onboard', (req, res) => {
         </div>
 
         <div class="form-group">
-          <label>Commercial Billing Option *</label>
+          <label>Commercial Billing Plan *</label>
           <select name="billingCycle" required>
-            <option value="monthly">Monthly Option: ₹9,999 Base + ₹5,000 Outbound (₹14,999/mo)</option>
-            <option value="quarterly" selected>Quarterly Bundle: ₹29,997 Base + ₹9,999 Outbound (₹39,996/qtr)</option>
+            <option value="monthly">Monthly Automation Plan (₹9,999/mo)</option>
+            <option value="quarterly" selected>Quarterly Automation Bundle (₹24,999/qtr)</option>
           </select>
         </div>
       </div>
@@ -409,23 +409,20 @@ app.get('/agency', async (req, res) => {
   try {
     const clientList = await db.select().from(clients);
     
-    // Financial & Metric Calculations
+    // Financial & Metric Calculations (Pure Automation Offer: ₹9,999/mo or ₹24,999/qtr = ₹8,333/mo)
     const activeClientsCount = clientList.filter(c => c.active).length;
     const tier1Count = clientList.filter(c => c.billingCycle === 'monthly').length;
     const tier2Count = clientList.filter(c => c.billingCycle === 'quarterly').length;
 
-    // Itemized MRR Calculation:
-    // Core Engine = ₹9,999/mo per client
-    // Outbound Add-on: Monthly = ₹5,000/mo | Quarterly = ₹9,999/3 = ₹3,333/mo
-    const mrr = (activeClientsCount * 9999) + (tier1Count * 5000) + (tier2Count * 3333);
+    const mrr = (tier1Count * 9999) + (tier2Count * 8333);
     
     let totalOutboundSent = 0;
     clientList.forEach(c => totalOutboundSent += (c.outboundSentThisMonth || 0));
 
-    // Meta API Base Cost (India Outbound Marketing): ₹1.02 per message
+    // Pure Automation Meta Cost = ₹0.00 (Customer Service Window)
     const totalMetaCost = Math.round(totalOutboundSent * 1.02);
     const netProfit = mrr - totalMetaCost;
-    const profitMargin = mrr > 0 ? Math.round((netProfit / mrr) * 100) : 93;
+    const profitMargin = mrr > 0 ? Math.round((netProfit / mrr) * 100) : 99;
 
     const clientRowsHtml = clientList.length === 0
       ? `<tr><td colspan="6" style="text-align:center; padding: 40px; color: #A8A29E;">No restaurants onboarded yet. Click "Onboard New Restaurant" to get started!</td></tr>`
@@ -435,8 +432,7 @@ app.get('/agency', async (req, res) => {
       const pct = Math.min(Math.round((sent / maxQuota) * 100), 100);
       const isQuotaFull = sent >= maxQuota;
       
-      const metaExpense = (sent * 1.02).toFixed(2);
-      const tierPrice = c.billingCycle === 'quarterly' ? 'Quarterly: ₹29,997 Base + ₹9,999 Add-on' : 'Monthly: ₹9,999 Base + ₹5,000 Add-on';
+      const tierPrice = c.billingCycle === 'quarterly' ? 'Quarterly: ₹24,999 / qtr' : 'Monthly: ₹9,999 / mo';
       const tierBadgeClass = c.billingCycle === 'quarterly' ? 'tier-quarterly' : 'tier-monthly';
 
       return `
@@ -450,23 +446,15 @@ app.get('/agency', async (req, res) => {
             <div style="font-size:11px; color:#A8A29E; margin-top:4px;">${tierPrice}</div>
           </td>
           <td>
-            <div class="quota-meter-container">
-              <div class="quota-text">
-                <span>${sent} / ${maxQuota} msgs</span>
-                <span class="${isQuotaFull ? 'text-danger' : 'text-success'}">${pct}%</span>
-              </div>
-              <div class="progress-bar-bg">
-                <div class="progress-bar-fill ${isQuotaFull ? 'fill-full' : ''}" style="width: ${pct}%"></div>
-              </div>
-              ${isQuotaFull ? '<div class="quota-warning">🛑 Smart Cut-off Active (Quota Limit Reached)</div>' : ''}
-            </div>
+            <div style="font-weight:700; color:#4ADE80; font-size:13px;">⚡ Unlimited Inbound & Reviews</div>
+            <div style="font-size:11px; color:#A8A29E;">₹0.00 Meta Cost</div>
           </td>
           <td>
-            <div class="resets-date">📅 ${c.nextMonthlyResetDate || 'Next Midnight'}</div>
+            <div class="resets-date">📅 Active 24/7 Engine</div>
           </td>
           <td>
-            <div class="meta-cost">₹${metaExpense}</div>
-            <div class="cost-note">@ ₹1.02/msg</div>
+            <div class="meta-cost" style="color:#4ADE80;">₹0.00</div>
+            <div class="cost-note">24h Customer Service Window</div>
           </td>
           <td>
             <a href="/restaurant/${c.slug}" target="_blank" class="btn-view-logbook">📋 Open Logbook</a>
@@ -613,14 +601,6 @@ app.get('/agency', async (req, res) => {
     }
     .tier-monthly { background: rgba(59, 130, 246, 0.15); color: #60A5FA; border: 1px solid #3B82F6; }
     .tier-quarterly { background: rgba(168, 85, 247, 0.15); color: #C084FC; border: 1px solid #A855F7; }
-    .quota-meter-container { width: 220px; }
-    .quota-text { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
-    .progress-bar-bg { width: 100%; height: 8px; background: #22201D; border-radius: 4px; overflow: hidden; }
-    .progress-bar-fill { height: 100%; background: #F59E0B; border-radius: 4px; }
-    .fill-full { background: #EF4444 !important; }
-    .text-danger { color: #EF4444; font-weight: 700; }
-    .text-success { color: #4ADE80; font-weight: 700; }
-    .quota-warning { font-size: 10px; color: #EF4444; font-weight: 700; margin-top: 4px; }
     .meta-cost { font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 700; color: #F3EFE6; }
     .cost-note { font-size: 10px; color: #78716C; }
     .btn-view-logbook {
@@ -642,7 +622,7 @@ app.get('/agency', async (req, res) => {
     <div class="header-banner">
       <div class="agency-title">
         <h1>🍽️ Restaurant Agency Operations Master</h1>
-        <p>Itemized Commercial Accounts & Meta API Cost Ledger • House of Bhaves</p>
+        <p>Pure WhatsApp Automation Account Ledger • House of Bhaves</p>
       </div>
       <div class="header-right-btns">
         <a href="/onboard" class="btn-onboard">➕ Onboard New Restaurant</a>
@@ -659,27 +639,21 @@ app.get('/agency', async (req, res) => {
       </div>
       <div class="metric-card">
         <div class="metric-val">${tier1Count} / ${tier2Count}</div>
-        <div class="metric-lbl">Monthly / Quarterly Tiers</div>
+        <div class="metric-lbl">Monthly / Quarterly Plans</div>
       </div>
       <div class="metric-card">
         <div class="metric-val val-green">~${profitMargin}%</div>
         <div class="metric-lbl">Net Profit Margin</div>
       </div>
       <div class="metric-card">
-        <div class="metric-val">${totalOutboundSent}</div>
-        <div class="metric-lbl">Outbound Msgs Sent</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-val">₹${totalMetaCost}</div>
-        <div class="metric-lbl">Meta Out-of-Pocket Expense</div>
+        <div class="metric-val val-green">₹0.00</div>
+        <div class="metric-lbl">Meta Out-of-Pocket Cost</div>
       </div>
     </div>
 
     <div class="control-actions">
       <strong style="font-size: 13px; text-transform: uppercase; color: #A8A29E; font-family: 'Space Grotesk';">⚡ Agency Admin Actions:</strong>
-      <button onclick="triggerAction('/api/agency/reset-quotas')" class="action-btn">🔄 Trigger Midnight Quota Reset</button>
       <button onclick="triggerAction('/api/agency/trigger-review-queue')" class="action-btn">⏱️ Process 2-Hr Review Queue</button>
-      <button onclick="triggerAction('/api/agency/trigger-marketing-cron')" class="action-btn">📢 Run 10 AM Outbound Cron</button>
     </div>
 
     <div class="table-container">
@@ -687,9 +661,9 @@ app.get('/agency', async (req, res) => {
         <thead>
           <tr>
             <th>Restaurant Client</th>
-            <th>Itemized Subscription Breakdown</th>
-            <th>Monthly Outbound Quota (1,000 Cap)</th>
-            <th>Reset Schedule</th>
+            <th>Automation Plan</th>
+            <th>Booking Engine Status</th>
+            <th>Engine Availability</th>
             <th>Meta API Out-of-Pocket</th>
             <th>Hostess Logbook</th>
           </tr>
