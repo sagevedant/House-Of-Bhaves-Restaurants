@@ -16,6 +16,8 @@ export const clients = sqliteTable('clients', {
   metaAccessToken: text('meta_access_token').notNull(),
   prefix: text('prefix').notNull().default('HOB'),
   googleReviewUrl: text('google_review_url').default('https://maps.google.com'),
+  customWelcomeText: text('custom_welcome_text'),
+  customMenuText: text('custom_menu_text'),
   active: integer('active', { mode: 'boolean' }).default(true),
 });
 
@@ -78,6 +80,8 @@ export const restaurants = sqliteTable('restaurants', {
   closedDays: text('closed_days').default(''),
   maxPaxNormal: integer('max_pax_normal').default(12),
   googleReviewUrl: text('google_review_url').default('https://maps.google.com'),
+  customWelcomeText: text('custom_welcome_text'),
+  customMenuText: text('custom_menu_text'),
   active: integer('active', { mode: 'boolean' }).default(true),
 });
 

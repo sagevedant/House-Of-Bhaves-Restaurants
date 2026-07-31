@@ -17,7 +17,8 @@ async function handleEntry(event, conversation, restaurant, stepData) {
             return { nextStep: 'guests', stepData };
         }
         if (event.buttonId === 'view_menu' || event.buttonId === 'view_cuisines') {
-            const menuTxt = `🍽️ *${restaurant.name} — Curated Cuisines & Chef Specials* 🌟\n\n🔥 *North Indian & Tandoor*\n• Butter Chicken & Garlic Naan 🧈\n• Dal Makhani & Dal Bukhara 🍲\n• Paneer Tikka & Galouti Kebab 🍢\n\n🥟 *Asian & Dim Sum*\n• Truffle Edamame Dim Sums 🥟\n• Spicy Asian Basil Rice 🍚\n• Crunchy Lotus Stem in Honey Chilli 🥢\n\n🍕 *Continental & Wood-Fired*\n• Truffle Mushroom Wood-Fired Pizza 🍕\n• Creamy Tuscan Pasta 🍝\n• Artisan Cheese Platter 🧀\n\n🍹 *Craft Cocktails & Desserts*\n• Smoked Old Fashioned & Elderflower Spritz 🍸\n• Sizzling Walnut Brownie with Gelato 🍨\n\nWould you like to reserve a table to taste our specials tonight? 👇`;
+            const defaultMenu = `🍽️ *${restaurant.name} — Curated Cuisines & Chef Specials* 🌟\n\n🔥 *North Indian & Tandoor*\n• Butter Chicken & Garlic Naan 🧈\n• Dal Makhani & Dal Bukhara 🍲\n• Paneer Tikka & Galouti Kebab 🍢\n\n🥟 *Asian & Dim Sum*\n• Truffle Edamame Dim Sums 🥟\n• Spicy Asian Basil Rice 🍚\n• Crunchy Lotus Stem in Honey Chilli 🥢\n\n🍕 *Continental & Wood-Fired*\n• Truffle Mushroom Wood-Fired Pizza 🍕\n• Creamy Tuscan Pasta 🍝\n• Artisan Cheese Platter 🧀\n\n🍹 *Craft Cocktails & Desserts*\n• Smoked Old Fashioned & Elderflower Spritz 🍸\n• Sizzling Walnut Brownie with Gelato 🍨\n\nWould you like to reserve a table to taste our specials tonight? 👇`;
+            const menuTxt = restaurant.customMenuText || defaultMenu;
             await (0, sender_1.sendButtons)(restaurant, phone, menuTxt, [
                 { id: 'book_table', title: 'Book a Table 🍽️' },
                 { id: 'talk_to_us', title: 'Talk to Us 💬' },
@@ -122,7 +123,9 @@ async function handleEntry(event, conversation, restaurant, stepData) {
     return { nextStep: 'entry', stepData };
 }
 async function sendWelcome(restaurant, phone) {
-    await (0, sender_1.sendButtons)(restaurant, phone, `🍽️ Welcome to ${restaurant.name}!\n\nWhether it's a cozy dinner, a birthday celebration, or an evening under the stars — we've got the perfect table for you.\n\nTap below to reserve your table instantly! 👇`, [
+    const defaultWelcome = `🍽️ Welcome to ${restaurant.name}!\n\nWhether it's a cozy dinner, a birthday celebration, or an evening under the stars — we've got the perfect table for you.\n\nTap below to reserve your table instantly! 👇`;
+    const welcomeTxt = restaurant.customWelcomeText || defaultWelcome;
+    await (0, sender_1.sendButtons)(restaurant, phone, welcomeTxt, [
         { id: 'book_table', title: 'Book a Table 🍽️' },
         { id: 'view_menu', title: 'Cuisines & Specials 📋' },
         { id: 'talk_to_us', title: 'Talk to Us 💬' },

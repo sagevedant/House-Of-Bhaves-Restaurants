@@ -17,6 +17,8 @@ exports.clients = (0, sqlite_core_1.sqliteTable)('clients', {
     metaAccessToken: (0, sqlite_core_1.text)('meta_access_token').notNull(),
     prefix: (0, sqlite_core_1.text)('prefix').notNull().default('HOB'),
     googleReviewUrl: (0, sqlite_core_1.text)('google_review_url').default('https://maps.google.com'),
+    customWelcomeText: (0, sqlite_core_1.text)('custom_welcome_text'),
+    customMenuText: (0, sqlite_core_1.text)('custom_menu_text'),
     active: (0, sqlite_core_1.integer)('active', { mode: 'boolean' }).default(true),
 });
 exports.customers = (0, sqlite_core_1.sqliteTable)('customers', {
@@ -75,6 +77,8 @@ exports.restaurants = (0, sqlite_core_1.sqliteTable)('restaurants', {
     closedDays: (0, sqlite_core_1.text)('closed_days').default(''),
     maxPaxNormal: (0, sqlite_core_1.integer)('max_pax_normal').default(12),
     googleReviewUrl: (0, sqlite_core_1.text)('google_review_url').default('https://maps.google.com'),
+    customWelcomeText: (0, sqlite_core_1.text)('custom_welcome_text'),
+    customMenuText: (0, sqlite_core_1.text)('custom_menu_text'),
     active: (0, sqlite_core_1.integer)('active', { mode: 'boolean' }).default(true),
 });
 exports.conversations = (0, sqlite_core_1.sqliteTable)('conversations', {

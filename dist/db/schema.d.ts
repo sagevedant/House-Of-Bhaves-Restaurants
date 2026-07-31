@@ -205,6 +205,44 @@ export declare const clients: import("drizzle-orm/sqlite-core").SQLiteTableWithC
         }, {}, {
             length: number | undefined;
         }>;
+        customWelcomeText: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "custom_welcome_text";
+            tableName: "clients";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        customMenuText: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "custom_menu_text";
+            tableName: "clients";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
         active: import("drizzle-orm/sqlite-core").SQLiteColumn<{
             name: "active";
             tableName: "clients";
@@ -954,6 +992,44 @@ export declare const restaurants: import("drizzle-orm/sqlite-core").SQLiteTableW
             driverParam: string;
             notNull: false;
             hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        customWelcomeText: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "custom_welcome_text";
+            tableName: "restaurants";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        customMenuText: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "custom_menu_text";
+            tableName: "restaurants";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
             isPrimaryKey: false;
             isAutoincrement: false;
             hasRuntimeDefault: false;

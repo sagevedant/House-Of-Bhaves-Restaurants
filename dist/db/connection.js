@@ -67,6 +67,8 @@ async function initializeDatabase() {
       meta_access_token TEXT NOT NULL,
       prefix TEXT DEFAULT 'HOB',
       google_review_url TEXT DEFAULT 'https://maps.google.com',
+      custom_welcome_text TEXT,
+      custom_menu_text TEXT,
       active INTEGER DEFAULT 1
     )
   `);
@@ -123,6 +125,8 @@ async function initializeDatabase() {
       closed_days TEXT DEFAULT '',
       max_pax_normal INTEGER DEFAULT 12,
       google_review_url TEXT DEFAULT 'https://maps.google.com',
+      custom_welcome_text TEXT,
+      custom_menu_text TEXT,
       active INTEGER DEFAULT 1
     )
   `);
@@ -175,6 +179,22 @@ async function initializeDatabase() {
     catch { }
     try {
         await exports.sqlite.execute(`ALTER TABLE clients ADD COLUMN next_monthly_reset_date TEXT;`);
+    }
+    catch { }
+    try {
+        await exports.sqlite.execute(`ALTER TABLE clients ADD COLUMN custom_welcome_text TEXT;`);
+    }
+    catch { }
+    try {
+        await exports.sqlite.execute(`ALTER TABLE clients ADD COLUMN custom_menu_text TEXT;`);
+    }
+    catch { }
+    try {
+        await exports.sqlite.execute(`ALTER TABLE restaurants ADD COLUMN custom_welcome_text TEXT;`);
+    }
+    catch { }
+    try {
+        await exports.sqlite.execute(`ALTER TABLE restaurants ADD COLUMN custom_menu_text TEXT;`);
     }
     catch { }
     try {

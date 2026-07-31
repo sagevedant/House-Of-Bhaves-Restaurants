@@ -31,6 +31,8 @@ export async function initializeDatabase() {
       meta_access_token TEXT NOT NULL,
       prefix TEXT DEFAULT 'HOB',
       google_review_url TEXT DEFAULT 'https://maps.google.com',
+      custom_welcome_text TEXT,
+      custom_menu_text TEXT,
       active INTEGER DEFAULT 1
     )
   `);
@@ -91,6 +93,8 @@ export async function initializeDatabase() {
       closed_days TEXT DEFAULT '',
       max_pax_normal INTEGER DEFAULT 12,
       google_review_url TEXT DEFAULT 'https://maps.google.com',
+      custom_welcome_text TEXT,
+      custom_menu_text TEXT,
       active INTEGER DEFAULT 1
     )
   `);
@@ -137,6 +141,10 @@ export async function initializeDatabase() {
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN outbound_allowance_monthly INTEGER DEFAULT 1000;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN outbound_sent_this_month INTEGER DEFAULT 0;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN next_monthly_reset_date TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN custom_welcome_text TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN custom_menu_text TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN custom_welcome_text TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN custom_menu_text TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE customers ADD COLUMN last_inbound_interaction TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE bookings ADD COLUMN review_scheduled_at TEXT;`); } catch {}
 

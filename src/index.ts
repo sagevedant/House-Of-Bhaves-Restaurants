@@ -223,7 +223,8 @@ app.get('/onboard', (req, res) => {
       font-size: 15px;
       font-family: inherit;
     }
-    input:focus, select:focus { border-color: #F59E0B; outline: none; }
+    textarea { height: 100px; resize: vertical; }
+    input:focus, select:focus, textarea:focus { border-color: #F59E0B; outline: none; }
     .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .submit-btn {
       width: 100%;
@@ -256,7 +257,7 @@ app.get('/onboard', (req, res) => {
   <div class="form-container">
     <div class="form-header">
       <h1>🍽️ Onboard New Restaurant Client</h1>
-      <p>Pure WhatsApp Booking Automation & Same-Day Review Engine Setup</p>
+      <p>Configure WhatsApp Credentials, Custom Greeting, Cuisines & Seating Setup</p>
     </div>
 
     <div class="pricing-box">
@@ -285,6 +286,16 @@ app.get('/onboard', (req, res) => {
             <option value="quarterly" selected>Quarterly Automation Bundle (₹24,999/qtr)</option>
           </select>
         </div>
+      </div>
+
+      <div class="form-group">
+        <label>Custom Bot Welcome Greeting (Optional)</label>
+        <textarea name="customWelcomeText" placeholder="Welcome to Paasha Rooftop! Enjoy 360-degree skyline views & authentic North Indian delicacies. Tap below to book your table!"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Custom Cuisines & Chef Specials Guide (Optional)</label>
+        <textarea name="customMenuText" placeholder="🔥 North Indian & Tandoor: Butter Chicken, Dal Makhani&#10;🥟 Asian & Dim Sum: Truffle Edamame Dim Sum&#10;🍕 Wood-fired Pizza: Truffle Mushroom Pizza"></textarea>
       </div>
 
       <div class="form-group">
@@ -341,7 +352,9 @@ app.post('/api/agency/onboard', async (req, res) => {
       metaAccessToken,
       prefix,
       managerPhone,
-      googleReviewUrl
+      googleReviewUrl,
+      customWelcomeText,
+      customMenuText
     } = req.body;
 
     if (!businessName || !slug || !whatsappPhoneNumberId || !metaAccessToken) {
@@ -366,6 +379,8 @@ app.post('/api/agency/onboard', async (req, res) => {
       metaAccessToken,
       prefix: prefix || 'HOB',
       googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
+      customWelcomeText: customWelcomeText || null,
+      customMenuText: customMenuText || null,
       active: true
     });
 
@@ -379,6 +394,8 @@ app.post('/api/agency/onboard', async (req, res) => {
       prefix: prefix || 'HOB',
       managerPhone: managerPhone || '919699533441',
       googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
+      customWelcomeText: customWelcomeText || null,
+      customMenuText: customMenuText || null,
       active: true
     });
 
@@ -585,7 +602,7 @@ app.get('/agency', async (req, res) => {
     .meta-cost { font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 700; color: #F3EFE6; }
     .cost-note { font-size: 10px; color: #78716C; }
     .btn-view-logbook {
-      background: #1C1917;
+      background: #1C1B18;
       border: 1px solid #3E3932;
       color: #F59E0B;
       padding: 8px 14px;
