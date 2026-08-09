@@ -70,6 +70,7 @@ async function initializeDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       business_name TEXT NOT NULL,
       slug TEXT NOT NULL UNIQUE,
+      industry_type TEXT DEFAULT 'restaurant',
       billing_cycle TEXT DEFAULT 'monthly',
       outbound_allowance_monthly INTEGER DEFAULT 1000,
       outbound_sent_this_month INTEGER DEFAULT 0,
@@ -122,12 +123,13 @@ async function initializeDatabase() {
     await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_customers_phone_client ON customers(phone_number, client_id)`);
     await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)`);
     await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date)`);
-    // Single Restaurant / Legacy Tables
+    // Single Restaurant Layer
     await exports.sqlite.execute(`
     CREATE TABLE IF NOT EXISTS restaurants (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       slug TEXT NOT NULL DEFAULT 'hob-restaurant',
+      industry_type TEXT DEFAULT 'restaurant',
       address TEXT NOT NULL,
       whatsapp_phone_number_id TEXT NOT NULL,
       meta_access_token TEXT NOT NULL,
@@ -179,6 +181,10 @@ async function initializeDatabase() {
     await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_reservations_date ON reservations(date)`);
     // Safe Migration Alter Helpers
     try {
+        await exports.sqlite.execute(`ALTER TABLE clients ADD COLUMN industry_type TEXT DEFAULT 'restaurant';`);
+    }
+    catch { }
+    try {
         await exports.sqlite.execute(`ALTER TABLE clients ADD COLUMN billing_cycle TEXT DEFAULT 'monthly';`);
     }
     catch { }
@@ -211,6 +217,10 @@ async function initializeDatabase() {
     }
     catch { }
     try {
+        await exports.sqlite.execute(`ALTER TABLE restaurants ADD COLUMN industry_type TEXT DEFAULT 'restaurant';`);
+    }
+    catch { }
+    try {
         await exports.sqlite.execute(`ALTER TABLE restaurants ADD COLUMN custom_welcome_text TEXT;`);
     }
     catch { }
@@ -226,7 +236,7 @@ async function initializeDatabase() {
         await exports.sqlite.execute(`ALTER TABLE bookings ADD COLUMN review_scheduled_at TEXT;`);
     }
     catch { }
-    // Safe PRAGMA Execution (Skipped cleanly on Turso Cloud HTTP)
+    // Safe PRAGMA Execution
     try {
         await exports.sqlite.execute(`PRAGMA journal_mode = WAL`);
     }
