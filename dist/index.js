@@ -80,7 +80,7 @@ app.get('/deletion', (req, res) => {
     <body><h1>User Data Deletion Instructions</h1><p>To request deletion of your reservation data, please email <strong>bhavevedant18@gmail.com</strong> with your registered WhatsApp phone number. All data will be removed within 48 hours.</p></body></html>
   `);
 });
-// CSV Export Endpoint for Client Front-Desk Logbook
+// CSV Export Endpoint for Restaurant Hostess Logbook
 app.get('/api/restaurant/:slug/export', async (req, res) => {
     try {
         const slug = req.params.slug;
@@ -88,15 +88,15 @@ app.get('/api/restaurant/:slug/export', async (req, res) => {
         const restMatches = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.slug, slug)).limit(1);
         const client = clientMatches[0];
         const restaurant = restMatches[0];
-        const name = client?.businessName || restaurant?.name || 'Client';
+        const name = client?.businessName || restaurant?.name || 'Restaurant';
         let allRes = [];
         if (client) {
             const clientBookings = await connection_1.db.select().from(schema_1.bookings).where((0, drizzle_orm_1.eq)(schema_1.bookings.clientId, client.id)).orderBy((0, drizzle_orm_1.desc)(schema_1.bookings.createdAt));
             allRes = clientBookings.map(b => ({
                 code: b.reservationCode || '',
-                name: b.customerName || 'Guest/Patient',
+                name: b.customerName || 'Guest',
                 phone: b.customerPhone || '',
-                guests: b.guests || 1,
+                guests: b.guests || 2,
                 occasion: b.occasion || 'casual',
                 date: b.date || '',
                 time: b.time || '',
@@ -108,9 +108,9 @@ app.get('/api/restaurant/:slug/export', async (req, res) => {
             const restReservations = await connection_1.db.select().from(schema_1.reservations).where((0, drizzle_orm_1.eq)(schema_1.reservations.restaurantId, restaurant.id)).orderBy((0, drizzle_orm_1.desc)(schema_1.reservations.createdAt));
             allRes = restReservations.map(r => ({
                 code: r.reservationCode || '',
-                name: r.customerName || 'Guest/Patient',
+                name: r.customerName || 'Guest',
                 phone: r.customerPhone || '',
-                guests: r.guests || 1,
+                guests: r.guests || 2,
                 occasion: r.occasion || 'casual',
                 date: r.date || '',
                 time: r.time || '',
@@ -118,13 +118,13 @@ app.get('/api/restaurant/:slug/export', async (req, res) => {
                 createdAt: r.createdAt || ''
             }));
         }
-        let csvContent = 'Booking Code,Client/Patient Name,Phone Number,Pax/Guests,Service/Occasion,Date,Time,Status,Created At\n';
+        let csvContent = 'Reservation Code,Customer Name,Phone Number,Guests,Occasion,Date,Time,Status,Created At\n';
         for (const r of allRes) {
             const line = `"${r.code}","${r.name}","+${r.phone}",${r.guests},"${r.occasion}","${r.date}","${r.time}","${r.status}","${r.createdAt}"\n`;
             csvContent += line;
         }
         res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename="${slug}-bookings-${new Date().toISOString().split('T')[0]}.csv"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${slug}-reservations-${new Date().toISOString().split('T')[0]}.csv"`);
         res.status(200).send(csvContent);
     }
     catch (error) {
@@ -144,10 +144,10 @@ app.post('/api/reservations/demo', async (req, res) => {
             restaurantId,
             customerName: 'Vedant Bhave',
             customerPhone: '919699533441',
-            guests: 2,
-            occasion: 'casual',
+            guests: 4,
+            occasion: 'birthday',
             date: new Date().toISOString().split('T')[0],
-            time: '18:30',
+            time: '20:30',
             reservationCode: code,
             stage: 'booked',
         }).returning();
@@ -223,7 +223,7 @@ app.post('/api/agency/trigger-review-queue', async (req, res) => {
     res.json(result);
 });
 // ----------------------------------------------------
-// 📝 LUXURY MULTI-INDUSTRY ONBOARDING PORTAL (GET /onboard)
+// 📝 LUXURY GRAINY-TEXTURED ONBOARDING PORTAL (GET /onboard)
 // ----------------------------------------------------
 app.get('/onboard', (req, res) => {
     res.send(`
@@ -232,7 +232,7 @@ app.get('/onboard', (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Onboard Client | House of Bhaves Agency</title>
+  <title>Onboard Restaurant Client | House of Bhaves Agency</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -335,31 +335,20 @@ app.get('/onboard', (req, res) => {
   <div class="form-container">
     <div class="form-header">
       <div class="brand-pill">House of Bhaves Agency</div>
-      <h1>✨ Onboard B2B Client</h1>
-      <p>Configure Clinics, Salons & Restaurants for 24/7 WhatsApp AI Automation</p>
+      <h1>🍽️ Onboard Restaurant Client</h1>
+      <p>Configure Custom Greetings, Operating Hours, Cuisines & Seating Setup</p>
     </div>
 
     <form action="/api/agency/onboard" method="POST">
-      <div class="row-2">
-        <div class="form-group">
-          <label>Target Industry Category *</label>
-          <select name="industryType" required>
-            <option value="clinic" selected>🏥 Medical Clinic / Skin / Dental</option>
-            <option value="salon">💇 Premium Salon & Luxury Spa</option>
-            <option value="restaurant">🍽️ Restaurant & Lounge</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label>Business Name *</label>
-          <input type="text" name="businessName" placeholder="e.g. Radiance Dental & Aesthetics Clinic" required>
-        </div>
+      <div class="form-group">
+        <label>Restaurant Business Name *</label>
+        <input type="text" name="businessName" placeholder="e.g. Big Bang Community (BBC)" required>
       </div>
 
       <div class="row-2">
         <div class="form-group">
           <label>Custom URL Slug *</label>
-          <input type="text" name="slug" placeholder="e.g. radiance-dental-clinic" required>
+          <input type="text" name="slug" placeholder="e.g. big-bang-community" required>
           <div class="note">Generates /restaurant/:slug logbook</div>
         </div>
 
@@ -374,28 +363,28 @@ app.get('/onboard', (req, res) => {
 
       <div class="row-2">
         <div class="form-group">
-          <label>Morning OPD / Slot Hours</label>
-          <input type="text" name="openingHoursLunch" placeholder="e.g. 10:00-14:00 (leave blank if closed morning)">
+          <label>Lunch Hours (Afternoon)</label>
+          <input type="text" name="openingHoursLunch" placeholder="e.g. 12:00-15:30 (leave blank if closed lunch)">
         </div>
         <div class="form-group">
-          <label>Evening OPD / Slot Hours</label>
-          <input type="text" name="openingHoursDinner" placeholder="e.g. 17:00-21:00">
+          <label>Dinner Hours (Evening)</label>
+          <input type="text" name="openingHoursDinner" placeholder="e.g. 19:00-00:30 (Evening post 7 PM)">
         </div>
       </div>
 
       <div class="form-group">
         <label>Custom Bot Welcome Greeting (Optional)</label>
-        <textarea name="customWelcomeText" placeholder="e.g. Welcome to Radiance Skin & Dental Clinic! 🏥 Book your consultation or procedure slot in 10 seconds. Tap below to reserve!"></textarea>
+        <textarea name="customWelcomeText" placeholder="e.g. Welcome to Big Bang Community (BBC)! Relaxed outdoor seating, live music & sports screenings. Tap below to book your table!"></textarea>
       </div>
 
       <div class="form-group">
-        <label>Custom Services / Treatments List (Optional)</label>
-        <textarea name="customMenuText" placeholder="e.g. 🦷 Dental Aligners & Smile Makeovers&#10;✨ Laser Skin Resurfacing & Peels&#10;💆 Hair Restoration & PRP&#10;🩺 General Doctor Consultation"></textarea>
+        <label>Custom Cuisines & Chef Specials Guide (Optional)</label>
+        <textarea name="customMenuText" placeholder="e.g. 🥟 Dumplings & Dim Sums&#10;🍝 Homestyle Rice & Pastas&#10;🍗 Crispy Korean Chicken&#10;🍹 Cold Brew Shakerato & Craft Beers"></textarea>
       </div>
 
       <div class="form-group">
-        <label>Business Address & Landmark</label>
-        <input type="text" name="address" placeholder="e.g. Koregaon Park, Pune">
+        <label>Restaurant Address & Landmark</label>
+        <input type="text" name="address" placeholder="e.g. Royale Heritage Mall, NIBM Road, Pune">
       </div>
 
       <div class="row-2">
@@ -405,8 +394,8 @@ app.get('/onboard', (req, res) => {
         </div>
 
         <div class="form-group">
-          <label>Booking Code Prefix *</label>
-          <input type="text" name="prefix" placeholder="e.g. RDC" required>
+          <label>Reservation Code Prefix *</label>
+          <input type="text" name="prefix" placeholder="e.g. BBC" required>
         </div>
       </div>
 
@@ -417,17 +406,17 @@ app.get('/onboard', (req, res) => {
 
       <div class="row-2">
         <div class="form-group">
-          <label>Owner / Doctor WhatsApp Phone</label>
+          <label>Manager WhatsApp Phone</label>
           <input type="text" name="managerPhone" placeholder="e.g. 919511673214">
         </div>
 
         <div class="form-group">
-          <label>Google Review Link</label>
-          <input type="text" name="googleReviewUrl" placeholder="e.g. https://maps.google.com/?q=Radiance+Clinic">
+          <label>Google Review URL</label>
+          <input type="text" name="googleReviewUrl" placeholder="e.g. https://maps.google.com/?q=Big+Bang+Community">
         </div>
       </div>
 
-      <button type="submit" class="submit-btn">✨ Activate Client WhatsApp Engine</button>
+      <button type="submit" class="submit-btn">✨ Save & Activate Restaurant Client</button>
     </form>
   </div>
 </body>
@@ -437,7 +426,7 @@ app.get('/onboard', (req, res) => {
 // Client Onboarding Submission Endpoint
 app.post('/api/agency/onboard', async (req, res) => {
     try {
-        const { businessName, slug, industryType, billingCycle, address, whatsappPhoneNumberId, metaAccessToken, prefix, managerPhone, googleReviewUrl, customWelcomeText, customMenuText, openingHoursLunch, openingHoursDinner } = req.body;
+        const { businessName, slug, billingCycle, address, whatsappPhoneNumberId, metaAccessToken, prefix, managerPhone, googleReviewUrl, customWelcomeText, customMenuText, openingHoursLunch, openingHoursDinner } = req.body;
         if (!businessName || !slug) {
             return res.status(400).send('Missing required fields: businessName, slug');
         }
@@ -452,7 +441,6 @@ app.post('/api/agency/onboard', async (req, res) => {
         await connection_1.db.insert(schema_1.clients).values({
             businessName,
             slug: cleanSlug,
-            industryType: industryType || 'clinic',
             billingCycle: billingCycle || 'monthly',
             outboundAllowanceMonthly: 1000,
             outboundSentThisMonth: 0,
@@ -463,28 +451,25 @@ app.post('/api/agency/onboard', async (req, res) => {
             googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
             customWelcomeText: customWelcomeText || null,
             customMenuText: customMenuText || null,
-            openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '10:00-14:00',
-            openingHoursDinner: openingHoursDinner || '17:00-21:00',
             active: true
         });
         // Also insert into restaurants table (for backward compatibility)
         await connection_1.db.insert(schema_1.restaurants).values({
             name: businessName,
             slug: cleanSlug,
-            industryType: industryType || 'clinic',
             address: address || 'Pune',
             whatsappPhoneNumberId: phoneId,
             metaAccessToken: token,
             prefix: prefix || 'HOB',
             managerPhone: managerPhone || '919511673214',
-            openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '10:00-14:00',
-            openingHoursDinner: openingHoursDinner || '17:00-21:00',
+            openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '',
+            openingHoursDinner: openingHoursDinner || '19:00-00:30',
             googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
             customWelcomeText: customWelcomeText || null,
             customMenuText: customMenuText || null,
             active: true
         });
-        console.log(`✅ [Onboarding Success] Successfully onboarded client: ${businessName} (${cleanSlug})`);
+        console.log(`✅ [Onboarding Success] Successfully onboarded restaurant: ${businessName} (${cleanSlug})`);
         res.redirect(`/agency?onboarded=${cleanSlug}`);
     }
     catch (error) {
@@ -498,22 +483,24 @@ app.post('/api/agency/onboard', async (req, res) => {
 app.get('/agency', async (req, res) => {
     try {
         const clientList = await connection_1.db.select().from(schema_1.clients);
-        // Financial & Metric Calculations
+        // Financial & Metric Calculations (Pure Automation Offer: ₹9,999/mo or ₹24,999/qtr = ₹8,333/mo)
         const activeClientsCount = clientList.filter(c => c.active).length;
         const tier1Count = clientList.filter(c => c.billingCycle === 'monthly').length;
         const tier2Count = clientList.filter(c => c.billingCycle === 'quarterly').length;
         const mrr = (tier1Count * 9999) + (tier2Count * 8333);
+        // Pure Automation Meta Cost = ₹0.00 (Customer Service Window)
+        const totalMetaCost = 0;
+        const profitMargin = mrr > 0 ? 100 : 100;
         const clientRowsHtml = clientList.length === 0
-            ? `<tr><td colspan="6" style="text-align:center; padding: 40px; color: #A8A29E;">No clients onboarded yet. Click "Onboard New Client" to get started!</td></tr>`
+            ? `<tr><td colspan="6" style="text-align:center; padding: 40px; color: #A8A29E;">No restaurants onboarded yet. Click "Onboard New Restaurant" to get started!</td></tr>`
             : clientList.map(c => {
                 const tierPrice = c.billingCycle === 'quarterly' ? 'Quarterly: ₹24,999 / qtr' : 'Monthly: ₹9,999 / mo';
                 const tierBadgeClass = c.billingCycle === 'quarterly' ? 'tier-quarterly' : 'tier-monthly';
-                const industryEmoji = c.industryType === 'clinic' ? '🏥 Clinic' : c.industryType === 'salon' ? '💇 Salon' : '🍽️ Restaurant';
                 return `
         <tr>
           <td class="client-name">
             <strong>${c.businessName}</strong>
-            <div class="client-slug">${industryEmoji} • /restaurant/${c.slug}</div>
+            <div class="client-slug">Slug: /restaurant/${c.slug}</div>
           </td>
           <td>
             <span class="tier-badge ${tierBadgeClass}">${(c.billingCycle || 'monthly').toUpperCase()}</span>
@@ -704,11 +691,11 @@ app.get('/agency', async (req, res) => {
   <div class="container">
     <div class="header-banner">
       <div class="agency-title">
-        <h1>🏥 Agency Operations Master</h1>
-        <p>Clinic, Salon & Restaurant Automation Ledger • House of Bhaves</p>
+        <h1>🍽️ Restaurant Agency Operations Master</h1>
+        <p>Pure WhatsApp Automation Account Ledger • House of Bhaves</p>
       </div>
       <div class="header-right-btns">
-        <a href="/onboard" class="btn-onboard">➕ Onboard New Client</a>
+        <a href="/onboard" class="btn-onboard">➕ Onboard New Restaurant</a>
         <div class="mrr-badge">
           💰 MRR: ₹${mrr.toLocaleString('en-IN')}/mo
         </div>
@@ -718,7 +705,7 @@ app.get('/agency', async (req, res) => {
     <div class="metrics-grid">
       <div class="metric-card">
         <div class="metric-val val-amber">${activeClientsCount}</div>
-        <div class="metric-lbl">Active Clients</div>
+        <div class="metric-lbl">Active Restaurants</div>
       </div>
       <div class="metric-card">
         <div class="metric-val">${tier1Count} / ${tier2Count}</div>
@@ -743,12 +730,12 @@ app.get('/agency', async (req, res) => {
       <table>
         <thead>
           <tr>
-            <th>Business Client</th>
+            <th>Restaurant Client</th>
             <th>Automation Plan</th>
             <th>Booking Engine Status</th>
             <th>Engine Availability</th>
             <th>Meta API Out-of-Pocket</th>
-            <th>Front-Desk Logbook</th>
+            <th>Hostess Logbook</th>
           </tr>
         </thead>
         <tbody>
@@ -780,7 +767,7 @@ app.get('/agency', async (req, res) => {
         res.status(500).send('Internal Server Error');
     }
 });
-// Multi-tenant slug route & fallback
+// Multi-tenant slug route & fallback (Checks both clients & restaurants tables safely)
 app.get('/restaurant/:slug?', async (req, res) => {
     try {
         const targetSlug = req.params.slug || 'hob-restaurant';
@@ -803,7 +790,7 @@ app.get('/restaurant/:slug?', async (req, res) => {
                 .orderBy((0, drizzle_orm_1.desc)(schema_1.bookings.createdAt));
             allRes = clientBookings.map(b => ({
                 id: b.id,
-                customerName: b.customerName || 'Guest/Patient',
+                customerName: b.customerName || 'Guest',
                 customerPhone: b.customerPhone,
                 guests: b.guests,
                 occasion: b.occasion,
@@ -821,7 +808,7 @@ app.get('/restaurant/:slug?', async (req, res) => {
                 .orderBy((0, drizzle_orm_1.desc)(schema_1.reservations.createdAt));
             allRes = restReservations.map(r => ({
                 id: r.id,
-                customerName: r.customerName || 'Guest/Patient',
+                customerName: r.customerName || 'Guest',
                 customerPhone: r.customerPhone,
                 guests: r.guests,
                 occasion: r.occasion,
@@ -839,8 +826,8 @@ app.get('/restaurant/:slug?', async (req, res) => {
         const cardsHtml = allRes.length === 0
             ? `
         <div class="empty-state">
-          <h2>No appointments/bookings yet</h2>
-          <p>Bookings will appear here when clients/patients reserve via WhatsApp</p>
+          <h2>No reservations yet</h2>
+          <p>Bookings will appear here when guests reserve via WhatsApp</p>
           <button onclick="createDemo()" class="demo-btn">Create Demo Reservation</button>
         </div>
       `
@@ -858,16 +845,16 @@ app.get('/restaurant/:slug?', async (req, res) => {
                     badgeClass = 'badge-no-show';
                 let stickyNote = '';
                 if (r.occasion?.toLowerCase() === 'birthday') {
-                    stickyNote = `<div class="sticky-note">🎂 Birthday Special — VIP Offer Eligible!</div>`;
+                    stickyNote = `<div class="sticky-note">🎂 Birthday — Prep cake & décor! (1x/yr Offer)</div>`;
                 }
                 else if (r.occasion?.toLowerCase() === 'anniversary') {
-                    stickyNote = `<div class="sticky-note">🥂 Anniversary Special</div>`;
+                    stickyNote = `<div class="sticky-note">🥂 Anniversary — Candlelight setup!</div>`;
                 }
                 let actions = '';
                 if (r.stage === 'booked') {
                     actions = `
             <div class="card-actions">
-              <button onclick="updateStatus(${r.id}, 'seated')" class="btn-seated">🪑 Check-In / Arrived</button>
+              <button onclick="updateStatus(${r.id}, 'seated')" class="btn-seated">🪑 Mark Seated</button>
               <button onclick="updateStatus(${r.id}, 'completed')" class="btn-complete">✅ Completed</button>
               <button onclick="updateStatus(${r.id}, 'no_show')" class="btn-no-show">❌ No-Show</button>
             </div>
@@ -884,7 +871,7 @@ app.get('/restaurant/:slug?', async (req, res) => {
                 const occasionEmoji = r.occasion?.toLowerCase() === 'birthday' ? '🎂 ' :
                     r.occasion?.toLowerCase() === 'anniversary' ? '🥂 ' :
                         r.occasion?.toLowerCase() === 'party' ? '🎉 ' :
-                            r.occasion?.toLowerCase() === 'corporate' ? '💼 ' : '📋 ';
+                            r.occasion?.toLowerCase() === 'corporate' ? '💼 ' : '🍽️ ';
                 return `
           <div class="reservation-card" data-status="${r.stage}" data-search="${(r.customerName + ' ' + r.customerPhone + ' ' + r.reservationCode).toLowerCase()}">
             <div class="card-content">
@@ -896,12 +883,12 @@ app.get('/restaurant/:slug?', async (req, res) => {
               
               <div class="details-grid">
                 <div class="detail-item">
-                  <span class="detail-label">Pax</span>
+                  <span class="detail-label">Guests</span>
                   <span class="detail-value">👥 ${r.guests}</span>
                 </div>
                 <div class="detail-item">
-                  <span class="detail-label">Service/Occasion</span>
-                  <span class="detail-value">${occasionEmoji}${r.occasion || 'General'}</span>
+                  <span class="detail-label">Occasion</span>
+                  <span class="detail-value">${occasionEmoji}${r.occasion || 'None'}</span>
                 </div>
                 <div class="detail-item">
                   <span class="detail-label">Date & Time</span>
@@ -926,7 +913,7 @@ app.get('/restaurant/:slug?', async (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${displayName} | Front-Desk Ledger</title>
+  <title>${displayName} | Hostess Ledger</title>
   <meta name="description" content="Private Booking Ledger for ${displayName}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1159,7 +1146,7 @@ app.get('/restaurant/:slug?', async (req, res) => {
     <div class="header-card">
       <div class="restaurant-title">
         <h1>${displayName}</h1>
-        <p>Front-Desk Appointment Ledger • Slug: /restaurant/${displaySlug}</p>
+        <p>Hostess Front-Desk Ledger • URL Slug: /restaurant/${displaySlug}</p>
       </div>
       <div class="header-right">
         <a href="/api/restaurant/${displaySlug}/export" class="btn-export">📥 Export CSV</a>
@@ -1172,11 +1159,11 @@ app.get('/restaurant/:slug?', async (req, res) => {
     <div class="metrics-grid">
       <div class="metric-card">
         <div class="metric-value">${totalReservations}</div>
-        <div class="metric-label">📅 Total Appointments</div>
+        <div class="metric-label">🍽️ Total Tables</div>
       </div>
       <div class="metric-card">
         <div class="metric-value">${seatedCount}</div>
-        <div class="metric-label">🪑 Checked-In Now</div>
+        <div class="metric-label">🪑 Seated Now</div>
       </div>
       <div class="metric-card">
         <div class="metric-value">${birthdays}</div>
@@ -1184,7 +1171,7 @@ app.get('/restaurant/:slug?', async (req, res) => {
       </div>
       <div class="metric-card">
         <div class="metric-value">${parties}</div>
-        <div class="metric-label">🎉 VIP Offers</div>
+        <div class="metric-label">🎉 Parties</div>
       </div>
       <div class="metric-card">
         <div class="metric-value">${noShows}</div>
@@ -1197,7 +1184,7 @@ app.get('/restaurant/:slug?', async (req, res) => {
       <div class="tabs" id="statusTabs">
         <button class="tab-btn active" data-filter="all">All</button>
         <button class="tab-btn" data-filter="booked">Booked</button>
-        <button class="tab-btn" data-filter="seated">Checked-In</button>
+        <button class="tab-btn" data-filter="seated">Seated</button>
         <button class="tab-btn" data-filter="completed">Completed</button>
         <button class="tab-btn" data-filter="no_show">No-Show</button>
       </div>
@@ -1296,7 +1283,7 @@ async function main() {
     app.listen(config_1.config.PORT, () => {
         console.log(`🚀 House of Bhaves Agency Platform running on port ${config_1.config.PORT}`);
         console.log(`🏛️ Master Agency Dashboard: http://localhost:${config_1.config.PORT}/agency`);
-        console.log(`📝 Onboard Client Portal: http://localhost:${config_1.config.PORT}/onboard`);
+        console.log(`📝 Onboard Restaurant Portal: http://localhost:${config_1.config.PORT}/onboard`);
         console.log(`📋 Client Logbook: http://localhost:${config_1.config.PORT}/restaurant/hob-restaurant`);
         console.log(`🔗 Webhook: http://localhost:${config_1.config.PORT}/webhook`);
     });

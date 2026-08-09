@@ -57,25 +57,6 @@ export declare const clients: import("drizzle-orm/sqlite-core").SQLiteTableWithC
         }, {}, {
             length: number | undefined;
         }>;
-        industryType: import("drizzle-orm/sqlite-core").SQLiteColumn<{
-            name: "industry_type";
-            tableName: "clients";
-            dataType: "string";
-            columnType: "SQLiteText";
-            data: "clinic" | "salon" | "restaurant";
-            driverParam: string;
-            notNull: false;
-            hasDefault: true;
-            isPrimaryKey: false;
-            isAutoincrement: false;
-            hasRuntimeDefault: false;
-            enumValues: ["clinic", "salon", "restaurant"];
-            baseColumn: never;
-            identity: undefined;
-            generated: undefined;
-        }, {}, {
-            length: number | undefined;
-        }>;
         billingCycle: import("drizzle-orm/sqlite-core").SQLiteColumn<{
             name: "billing_cycle";
             tableName: "clients";
@@ -865,25 +846,6 @@ export declare const restaurants: import("drizzle-orm/sqlite-core").SQLiteTableW
             isAutoincrement: false;
             hasRuntimeDefault: false;
             enumValues: [string, ...string[]];
-            baseColumn: never;
-            identity: undefined;
-            generated: undefined;
-        }, {}, {
-            length: number | undefined;
-        }>;
-        industryType: import("drizzle-orm/sqlite-core").SQLiteColumn<{
-            name: "industry_type";
-            tableName: "restaurants";
-            dataType: "string";
-            columnType: "SQLiteText";
-            data: "clinic" | "salon" | "restaurant";
-            driverParam: string;
-            notNull: false;
-            hasDefault: true;
-            isPrimaryKey: false;
-            isAutoincrement: false;
-            hasRuntimeDefault: false;
-            enumValues: ["clinic", "salon", "restaurant"];
             baseColumn: never;
             identity: undefined;
             generated: undefined;

@@ -34,7 +34,6 @@ export async function initializeDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       business_name TEXT NOT NULL,
       slug TEXT NOT NULL UNIQUE,
-      industry_type TEXT DEFAULT 'restaurant',
       billing_cycle TEXT DEFAULT 'monthly',
       outbound_allowance_monthly INTEGER DEFAULT 1000,
       outbound_sent_this_month INTEGER DEFAULT 0,
@@ -91,13 +90,12 @@ export async function initializeDatabase() {
   await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)`);
   await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date)`);
 
-  // Single Restaurant Layer
+  // Single Restaurant / Legacy Tables
   await sqlite.execute(`
     CREATE TABLE IF NOT EXISTS restaurants (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       slug TEXT NOT NULL DEFAULT 'hob-restaurant',
-      industry_type TEXT DEFAULT 'restaurant',
       address TEXT NOT NULL,
       whatsapp_phone_number_id TEXT NOT NULL,
       meta_access_token TEXT NOT NULL,
@@ -152,7 +150,6 @@ export async function initializeDatabase() {
   await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_reservations_date ON reservations(date)`);
 
   // Safe Migration Alter Helpers
-  try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN industry_type TEXT DEFAULT 'restaurant';`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN billing_cycle TEXT DEFAULT 'monthly';`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN outbound_allowance_monthly INTEGER DEFAULT 1000;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN outbound_sent_this_month INTEGER DEFAULT 0;`); } catch {}
@@ -161,13 +158,12 @@ export async function initializeDatabase() {
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN custom_menu_text TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN opening_hours_lunch TEXT DEFAULT '';`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN opening_hours_dinner TEXT DEFAULT '19:00-00:30';`); } catch {}
-  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN industry_type TEXT DEFAULT 'restaurant';`); } catch {}
   try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN custom_welcome_text TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN custom_menu_text TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE customers ADD COLUMN last_inbound_interaction TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE bookings ADD COLUMN review_scheduled_at TEXT;`); } catch {}
 
-  // Safe PRAGMA Execution
+  // Safe PRAGMA Execution (Skipped cleanly on Turso Cloud HTTP)
   try { await sqlite.execute(`PRAGMA journal_mode = WAL`); } catch {}
   try { await sqlite.execute(`PRAGMA foreign_keys = ON`); } catch {}
 }
