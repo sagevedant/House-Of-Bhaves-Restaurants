@@ -20,18 +20,18 @@ async function handleIncomingEvent(phoneNumberId, event) {
         return;
     }
     const msgEvent = event;
-    // Look up active restaurant (prioritize Big Bang Community BBC for live demo)
-    let restaurantResult = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.slug, 'big-bang-community')).limit(1);
+    // Look up active client (prioritize Smize Dental Clinic for Dr. Kharat meeting demo)
+    let restaurantResult = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.slug, 'smize-dental')).limit(1);
     if (!restaurantResult || restaurantResult.length === 0) {
         restaurantResult = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.whatsappPhoneNumberId, phoneNumberId)).limit(1);
     }
     let restaurant = restaurantResult[0];
     if (!restaurant) {
-        console.warn(`⚠️ Router: Falling back to first restaurant in database...`);
+        console.warn(`⚠️ Router: Falling back to first restaurant/clinic in database...`);
         const all = await connection_1.db.select().from(schema_1.restaurants).limit(1);
         restaurant = all[0];
         if (!restaurant) {
-            console.error('❌ Router: No restaurants in database!');
+            console.error('❌ Router: No clients in database!');
             return;
         }
     }
@@ -44,7 +44,7 @@ async function handleIncomingEvent(phoneNumberId, event) {
     const convResult = await connection_1.db.select().from(schema_1.conversations).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.conversations.phone, phone), (0, drizzle_orm_1.eq)(schema_1.conversations.restaurantId, restaurant.id))).limit(1);
     let conversation;
     if (!convResult || convResult.length === 0) {
-        console.log(`✨ Router: Creating NEW conversation for phone '${phone}' at restaurant '${restaurant.name}'`);
+        console.log(`✨ Router: Creating NEW conversation for phone '${phone}' at client '${restaurant.name}'`);
         const [newConv] = await connection_1.db.insert(schema_1.conversations).values({
             phone,
             restaurantId: restaurant.id,
@@ -70,7 +70,7 @@ async function handleIncomingEvent(phoneNumberId, event) {
                 await (0, sender_1.sendText)(restaurant, phone, answer);
             }
             else {
-                await (0, sender_1.sendText)(restaurant, phone, 'Great question! For specific queries, please call us at ' + (restaurant.managerPhone || '+123456789') + '.');
+                await (0, sender_1.sendText)(restaurant, phone, 'Great question! For specific queries, please call us at ' + (restaurant.managerPhone || '+919511673214') + '.');
             }
             await (0, sender_1.sendText)(restaurant, phone, 'Now let\'s get back to your booking! 😊');
             const syntheticEvent = { ...msgEvent, type: 'text', text: '' };

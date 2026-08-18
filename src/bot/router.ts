@@ -20,19 +20,19 @@ export async function handleIncomingEvent(phoneNumberId: string, event: WhatsApp
   }
   const msgEvent = event as WhatsAppMessageEvent;
 
-  // Look up active restaurant (prioritize Big Bang Community BBC for live demo)
-  let restaurantResult = await db.select().from(restaurants).where(eq(restaurants.slug, 'big-bang-community')).limit(1);
+  // Look up active client (prioritize Smize Dental Clinic for Dr. Kharat meeting demo)
+  let restaurantResult = await db.select().from(restaurants).where(eq(restaurants.slug, 'smize-dental')).limit(1);
   if (!restaurantResult || restaurantResult.length === 0) {
     restaurantResult = await db.select().from(restaurants).where(eq(restaurants.whatsappPhoneNumberId, phoneNumberId)).limit(1);
   }
   let restaurant = restaurantResult[0];
 
   if (!restaurant) {
-    console.warn(`⚠️ Router: Falling back to first restaurant in database...`);
+    console.warn(`⚠️ Router: Falling back to first restaurant/clinic in database...`);
     const all = await db.select().from(restaurants).limit(1);
     restaurant = all[0];
     if (!restaurant) {
-      console.error('❌ Router: No restaurants in database!');
+      console.error('❌ Router: No clients in database!');
       return;
     }
   }
@@ -51,7 +51,7 @@ export async function handleIncomingEvent(phoneNumberId: string, event: WhatsApp
 
   let conversation: Conversation;
   if (!convResult || convResult.length === 0) {
-    console.log(`✨ Router: Creating NEW conversation for phone '${phone}' at restaurant '${restaurant.name}'`);
+    console.log(`✨ Router: Creating NEW conversation for phone '${phone}' at client '${restaurant.name}'`);
     const [newConv] = await db.insert(conversations).values({
       phone,
       restaurantId: restaurant.id,
@@ -77,7 +77,7 @@ export async function handleIncomingEvent(phoneNumberId: string, event: WhatsApp
       if (answer) {
         await sendText(restaurant, phone, answer);
       } else {
-        await sendText(restaurant, phone, 'Great question! For specific queries, please call us at ' + (restaurant.managerPhone || '+123456789') + '.');
+        await sendText(restaurant, phone, 'Great question! For specific queries, please call us at ' + (restaurant.managerPhone || '+919511673214') + '.');
       }
       await sendText(restaurant, phone, 'Now let\'s get back to your booking! 😊');
       

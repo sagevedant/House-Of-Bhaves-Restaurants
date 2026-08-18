@@ -15,13 +15,18 @@ export async function handleEntry(
   stepData: StepData,
 ): Promise<{ nextStep: string; stepData: StepData } | null> {
   const phone = event.from;
+  const isClinic = restaurant.slug.includes('dental') || restaurant.slug.includes('clinic') || restaurant.name.toLowerCase().includes('clinic') || restaurant.name.toLowerCase().includes('dental');
 
   if (event.type === 'button_reply') {
     if (event.buttonId === 'book_table') {
-      await sendButtons(restaurant, phone, '👥 How many guests will be dining?\n\nTap a button or type any number:', [
+      const promptTxt = isClinic 
+        ? '👥 How many patients/people will be visiting?\n\nTap a button or type any number:' 
+        : '👥 How many guests will be dining?\n\nTap a button or type any number:';
+      
+      await sendButtons(restaurant, phone, promptTxt, [
+        { id: 'pax_1', title: '1 Person' },
         { id: 'pax_2', title: '2 People' },
-        { id: 'pax_4', title: '4 People' },
-        { id: 'pax_6plus', title: '6+ Group' },
+        { id: 'pax_4', title: '3+ Group' },
       ]);
       return { nextStep: 'guests', stepData };
     }
@@ -29,27 +34,32 @@ export async function handleEntry(
       const defaultMenu = `🍽️ *${restaurant.name} — Curated Cuisines & Chef Specials* 🌟\n\n🔥 *North Indian & Tandoor*\n• Butter Chicken & Garlic Naan 🧈\n• Dal Makhani & Dal Bukhara 🍲\n• Paneer Tikka & Galouti Kebab 🍢\n\n🥟 *Asian & Dim Sum*\n• Truffle Edamame Dim Sums 🥟\n• Spicy Asian Basil Rice 🍚\n• Crunchy Lotus Stem in Honey Chilli 🥢\n\n🍕 *Continental & Wood-Fired*\n• Truffle Mushroom Wood-Fired Pizza 🍕\n• Creamy Tuscan Pasta 🍝\n• Artisan Cheese Platter 🧀\n\n🍹 *Craft Cocktails & Desserts*\n• Smoked Old Fashioned & Elderflower Spritz 🍸\n• Sizzling Walnut Brownie with Gelato 🍨\n\nWould you like to reserve a table to taste our specials tonight? 👇`;
       
       const menuTxt = restaurant.customMenuText || defaultMenu;
+      const bookBtnTitle = isClinic ? 'Book Appointment 📅' : 'Book a Table 🍽️';
       
       await sendButtons(restaurant, phone, menuTxt, [
-        { id: 'book_table', title: 'Book a Table 🍽️' },
+        { id: 'book_table', title: bookBtnTitle },
         { id: 'talk_to_us', title: 'Talk to Us 💬' },
-      ], `📋 Cuisines & Specials`);
+      ], isClinic ? `🩺 Services & Treatments` : `📋 Cuisines & Specials`);
       return { nextStep: 'entry', stepData };
     }
     if (event.buttonId === 'talk_to_us') {
-      await sendText(restaurant, phone, `📞 You can reach our manager at ${restaurant.managerPhone || '+919511673214'}.`);
+      await sendText(restaurant, phone, `📞 You can reach our clinic reception at ${restaurant.managerPhone || '+919511673214'}.`);
       return { nextStep: 'entry', stepData };
     }
     if (event.buttonId === 'new_booking') {
-      await sendButtons(restaurant, phone, '👥 How many guests will be dining?\n\nTap a button or type any number:', [
+      const promptTxt = isClinic 
+        ? '👥 How many patients/people will be visiting?\n\nTap a button or type any number:' 
+        : '👥 How many guests will be dining?\n\nTap a button or type any number:';
+
+      await sendButtons(restaurant, phone, promptTxt, [
+        { id: 'pax_1', title: '1 Person' },
         { id: 'pax_2', title: '2 People' },
-        { id: 'pax_4', title: '4 People' },
-        { id: 'pax_6plus', title: '6+ Group' },
+        { id: 'pax_4', title: '3+ Group' },
       ]);
       return { nextStep: 'guests', stepData: {} };
     }
     if (event.buttonId === 'modify_booking') {
-      await sendText(restaurant, phone, `Please call our manager at ${restaurant.managerPhone || '+919511673214'} to modify your booking.`);
+      await sendText(restaurant, phone, `Please call our clinic manager at ${restaurant.managerPhone || '+919511673214'} to modify your appointment.`);
       return { nextStep: 'finalized', stepData };
     }
     if (event.buttonId === 'cancel_booking') {
@@ -65,10 +75,10 @@ export async function handleEntry(
     
     if (extracted.intent === 'greeting' || extracted.intent === 'book' || !extracted.intent) {
       if (conversation.currentStep === 'finalized' && extracted.intent === 'greeting') {
-        await sendButtons(restaurant, phone, 'Welcome back! 😊 You have an existing reservation.\n\nWould you like to:', [
-          { id: 'new_booking', title: 'Book Another Table' },
-          { id: 'modify_booking', title: 'Modify Booking' },
-          { id: 'cancel_booking', title: 'Cancel Booking' },
+        await sendButtons(restaurant, phone, 'Welcome back! 😊 You have an existing appointment.\n\nWould you like to:', [
+          { id: 'new_booking', title: 'Book Another Slot' },
+          { id: 'modify_booking', title: 'Modify Appointment' },
+          { id: 'cancel_booking', title: 'Cancel Appointment' },
         ]);
         return { nextStep: 'entry', stepData };
       }
@@ -80,26 +90,27 @@ export async function handleEntry(
 
       if (extracted.intent === 'book') {
         if (stepData.guests && stepData.occasion && stepData.date && stepData.time) {
-          const occEmojis: Record<string, string> = { casual: '🍽️', birthday: '🎂', anniversary: '🥂', corporate: '💼', party: '🎉' };
-          const occLabels: Record<string, string> = { casual: 'Casual Dining', birthday: 'Birthday Celebration', anniversary: 'Anniversary', corporate: 'Corporate Event', party: 'Private Party' };
+          const occEmojis: Record<string, string> = { casual: '🩺', birthday: '🎂', anniversary: '🥂', corporate: '💼', party: '🎉' };
+          const occLabels: Record<string, string> = { casual: 'Consultation', birthday: 'Birthday Special', anniversary: 'Anniversary Special', corporate: 'Corporate Checkup', party: 'VIP Package' };
           const occ = stepData.occasion || 'casual';
-          const txt = `📋 *Your Reservation Summary:*\n\n🍽️ ${restaurant.name}\n👤 ${stepData.customerName || 'Guest'}\n👥 ${stepData.guests} Guests\n${occEmojis[occ]} ${occLabels[occ]}\n📅 ${formatDate(stepData.date!)}\n🕐 ${formatTime(stepData.time!)}\n\nDoes everything look good?`;
+          const txt = `📋 *Your Appointment Summary:*\n\n🩺 ${restaurant.name}\n👤 ${stepData.customerName || 'Patient'}\n👥 ${stepData.guests} Person(s)\n${occEmojis[occ]} ${occLabels[occ]}\n📅 ${formatDate(stepData.date!)}\n🕐 ${formatTime(stepData.time!)}\n\nDoes everything look good?`;
           await sendButtons(restaurant, phone, txt, [{ id: 'confirm_yes', title: 'Confirm ✅' }, { id: 'confirm_change', title: 'Change ↩️' }]);
           return { nextStep: 'confirm', stepData };
         } else if (!stepData.guests) {
-          await sendButtons(restaurant, phone, '👥 How many guests will be dining?\n\nTap a button or type any number:', [ { id: 'pax_2', title: '2 People' }, { id: 'pax_4', title: '4 People' }, { id: 'pax_6plus', title: '6+ Group' } ]);
+          const promptTxt = isClinic ? '👥 How many patients/people?\n\nTap a button or type any number:' : '👥 How many guests will be dining?\n\nTap a button or type any number:';
+          await sendButtons(restaurant, phone, promptTxt, [ { id: 'pax_1', title: '1 Person' }, { id: 'pax_2', title: '2 People' }, { id: 'pax_4', title: '3+ Group' } ]);
           return { nextStep: 'guests', stepData };
         } else if (!stepData.occasion) {
-          await sendList(restaurant, phone, '🎉 Any special occasion?\n\nWe\'ll make it extra special! Select the vibe for your evening:', 'Select Occasion', [{ title: '✨ Occasion Type', rows: [ { id: 'occ_casual', title: 'Casual Dining 🍽️', description: 'Just a great meal with great company' }, { id: 'occ_birthday', title: 'Birthday 🎂', description: 'Complimentary cake & table décor' }, { id: 'occ_anniversary', title: 'Anniversary 🥂', description: 'Candlelight table setup' }, { id: 'occ_corporate', title: 'Corporate 💼', description: 'Private seating arrangement' }, { id: 'occ_party', title: 'Private Party 🎉', description: 'Dedicated area with music' } ] }]);
+          await sendList(restaurant, phone, '🎉 Any special requirement/occasion?\n\nSelect your service type:', 'Select Type', [{ title: '✨ Service / Appointment Type', rows: [ { id: 'occ_casual', title: 'Consultation 🩺', description: 'General Doctor / Dentist Consultation' }, { id: 'occ_birthday', title: 'Birthday Special 🎂', description: 'Special birthday care offer' }, { id: 'occ_anniversary', title: 'Anniversary Special 🥂', description: 'Anniversary wellness package' }, { id: 'occ_corporate', title: 'Corporate Checkup 💼', description: 'Executive health screening' } ] }]);
           return { nextStep: 'occasion', stepData };
         } else if (!stepData.date) {
-          await sendButtons(restaurant, phone, '📅 When would you like to dine?\n\nPick a date or type a day (e.g. "Friday", "Kal"):', [ { id: 'date_today', title: 'Today' }, { id: 'date_tomorrow', title: 'Tomorrow' }, { id: 'date_dayafter', title: 'Day After' } ], '📅 Select Date');
+          await sendButtons(restaurant, phone, '📅 When would you like to visit?\n\nPick a date or type a day (e.g. "Friday", "Kal"):', [ { id: 'date_today', title: 'Today' }, { id: 'date_tomorrow', title: 'Tomorrow' }, { id: 'date_dayafter', title: 'Day After' } ], '📅 Select Date');
           return { nextStep: 'datetime_date', stepData };
         } else if (!stepData.time) {
-          const slots = getAvailableTimeSlots(stepData.date!, restaurant.openingHoursLunch || '', restaurant.openingHoursDinner || '19:00-00:30');
-          const sections = slots.filter(s => s.slots.length > 0).map(s => ({ title: `${s.period} service`, rows: s.slots.map(slot => ({ id: `time_${slot.replace(':', '_')}`, title: formatTime(slot) })) }));
+          const slots = getAvailableTimeSlots(stepData.date!, restaurant.openingHoursLunch || '10:00-14:00', restaurant.openingHoursDinner || '17:00-21:00');
+          const sections = slots.filter(s => s.slots.length > 0).map(s => ({ title: `${s.period} OPD`, rows: s.slots.map(slot => ({ id: `time_${slot.replace(':', '_')}`, title: formatTime(slot) })) }));
           if (sections.length > 0) {
-            await sendList(restaurant, phone, '🕐 Pick your preferred time slot:', 'Select Time', sections);
+            await sendList(restaurant, phone, '🕐 Pick your preferred OPD time slot:', 'Select Time', sections);
           }
           return { nextStep: 'datetime_time', stepData };
         }
@@ -111,7 +122,7 @@ export async function handleEntry(
       if (answer) {
         await sendText(restaurant, phone, answer);
       } else {
-        await sendText(restaurant, phone, 'Great question! For specific queries, please call us.');
+        await sendText(restaurant, phone, 'Great question! For specific queries, please call our clinic.');
       }
       await sendWelcome(restaurant, phone);
       return { nextStep: 'entry', stepData };
@@ -121,7 +132,7 @@ export async function handleEntry(
       return { nextStep: 'entry', stepData: {} };
     }
     if (extracted.intent === 'modify' && conversation.currentStep === 'finalized') {
-      await sendText(restaurant, phone, `Please call our manager at ${restaurant.managerPhone || '+919511673214'} to modify your booking.`);
+      await sendText(restaurant, phone, `Please call our clinic manager at ${restaurant.managerPhone || '+919511673214'} to modify your appointment.`);
       return { nextStep: 'finalized', stepData };
     }
   }
@@ -163,24 +174,30 @@ async function cancelUserBooking(phone: string, restaurant: Restaurant, stepData
   const codeText = resCode ? ` (Code: *${resCode}*)` : '';
 
   if (restaurant.managerPhone) {
-    await sendText(restaurant, restaurant.managerPhone, `❌ *Reservation Cancelled by Guest*\n\n📱 +${phone}${codeText}`);
+    await sendText(restaurant, restaurant.managerPhone, `❌ *Appointment Cancelled by Patient*\n\n📱 +${phone}${codeText}`);
   }
 
-  await sendText(restaurant, phone, `❌ Your table reservation${codeText} has been cancelled.\n\nWe hope to welcome you another time! Tap below anytime to reserve a table in the future. 👇`);
+  await sendText(restaurant, phone, `❌ Your appointment${codeText} has been cancelled.\n\nTap below anytime to reserve a new slot in the future. 👇`);
 }
 
 async function sendWelcome(restaurant: Restaurant, phone: string) {
-  const defaultWelcome = `🍽️ Welcome to ${restaurant.name}!\n\nWhether it's a cozy dinner, a birthday celebration, or an evening under the stars — we've got the perfect table for you.\n\nTap below to reserve your table instantly! 👇`;
+  const isClinic = restaurant.slug.includes('dental') || restaurant.slug.includes('clinic') || restaurant.name.toLowerCase().includes('clinic') || restaurant.name.toLowerCase().includes('dental');
+  const defaultWelcome = isClinic
+    ? `🦷 Welcome to ${restaurant.name}!\n\nBook your consultation or procedure appointment slot in 10 seconds. Tap below to reserve! 👇`
+    : `🍽️ Welcome to ${restaurant.name}!\n\nWhether it's a cozy dinner, a birthday celebration, or an evening under the stars — we've got the perfect table for you.\n\nTap below to reserve your table instantly! 👇`;
   
   const welcomeTxt = restaurant.customWelcomeText || defaultWelcome;
+
+  const bookBtnTitle = isClinic ? 'Book Appointment 📅' : 'Book a Table 🍽️';
+  const menuBtnTitle = isClinic ? 'Services & Info 📋' : 'Cuisines & Specials 📋';
 
   await sendButtons(restaurant, phone,
     welcomeTxt,
     [
-      { id: 'book_table', title: 'Book a Table 🍽️' },
-      { id: 'view_menu', title: 'Cuisines & Specials 📋' },
+      { id: 'book_table', title: bookBtnTitle },
+      { id: 'view_menu', title: menuBtnTitle },
       { id: 'talk_to_us', title: 'Talk to Us 💬' },
     ],
-    `🍽️ ${restaurant.name}`
+    isClinic ? `🩺 ${restaurant.name}` : `🍽️ ${restaurant.name}`
   );
 }
