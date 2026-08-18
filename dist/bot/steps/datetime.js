@@ -43,13 +43,13 @@ async function handleDateTimeDate(event, conversation, restaurant, stepData) {
     if (date) {
         const day = (0, dateHelpers_1.getDayName)(date).toLowerCase();
         if (restaurant.closedDays?.toLowerCase().includes(day)) {
-            await (0, sender_1.sendText)(restaurant, phone, `Sorry, we're closed on ${(0, dateHelpers_1.getDayName)(date)}s! Please pick another day 🙏`);
+            await (0, sender_1.sendText)(restaurant, phone, `Sorry, our clinic is closed on ${(0, dateHelpers_1.getDayName)(date)}s! Please pick another day 🙏`);
             await (0, occasion_1.sendDatePrompt)(restaurant, phone);
             return { nextStep: 'datetime_date', stepData };
         }
-        const slots = (0, dateHelpers_1.getAvailableTimeSlots)(date, restaurant.openingHoursLunch || '', restaurant.openingHoursDinner || '19:00-00:30');
+        const slots = (0, dateHelpers_1.getAvailableTimeSlots)(date, restaurant.openingHoursLunch || '10:00-14:00', restaurant.openingHoursDinner || '17:00-21:00');
         if (!slots || slots.length === 0 || slots.every(s => s.slots.length === 0)) {
-            await (0, sender_1.sendText)(restaurant, phone, `All slots for ${(0, dateHelpers_1.formatDate)(date)} are full or closed! How about another day? 🌟`);
+            await (0, sender_1.sendText)(restaurant, phone, `All OPD slots for ${(0, dateHelpers_1.formatDate)(date)} are full or closed! How about another day? 🌟`);
             await (0, occasion_1.sendDatePrompt)(restaurant, phone);
             return { nextStep: 'datetime_date', stepData };
         }
@@ -61,21 +61,21 @@ async function handleDateTimeDate(event, conversation, restaurant, stepData) {
     return { nextStep: 'datetime_date', stepData };
 }
 async function sendTimePrompt(restaurant, phone, date) {
-    const lunchHours = restaurant.openingHoursLunch !== null && restaurant.openingHoursLunch !== undefined ? restaurant.openingHoursLunch : '';
-    const dinnerHours = restaurant.openingHoursDinner || '19:00-00:30';
+    const lunchHours = restaurant.openingHoursLunch !== null && restaurant.openingHoursLunch !== undefined ? restaurant.openingHoursLunch : '10:00-14:00';
+    const dinnerHours = restaurant.openingHoursDinner || '17:00-21:00';
     const slots = (0, dateHelpers_1.getAvailableTimeSlots)(date, lunchHours, dinnerHours);
     const sections = slots.filter(s => s.slots.length > 0).map(s => ({
-        title: s.period === 'Lunch' ? '🌞 Lunch Service' : '🌙 Dinner Service',
+        title: s.period === 'Lunch' ? '🌞 Morning OPD (10 AM - 2 PM)' : '🌙 Evening OPD (5 PM - 9 PM)',
         rows: s.slots.map(slot => ({
             id: `time_${slot.replace(':', '_')}`,
             title: (0, dateHelpers_1.formatTime)(slot)
         }))
     }));
     if (sections.length > 0) {
-        await (0, sender_1.sendList)(restaurant, phone, '🕐 Select your preferred time slot:', 'Select Time', sections);
+        await (0, sender_1.sendList)(restaurant, phone, '🕐 Select your preferred OPD time slot:', 'Select Time', sections);
     }
     else {
-        await (0, sender_1.sendText)(restaurant, phone, `No available slots for ${(0, dateHelpers_1.formatDate)(date)}. Please select another day!`);
+        await (0, sender_1.sendText)(restaurant, phone, `No available OPD slots for ${(0, dateHelpers_1.formatDate)(date)}. Please select another day!`);
     }
 }
 async function handleDateTimeTime(event, conversation, restaurant, stepData) {
@@ -103,12 +103,15 @@ async function handleDateTimeTime(event, conversation, restaurant, stepData) {
     return { nextStep: 'datetime_time', stepData };
 }
 async function sendConfirmPrompt(restaurant, phone, stepData, conversation) {
-    const occasionEmojis = { casual: '🍽️', birthday: '🎂', anniversary: '🥂', corporate: '💼', party: '🎉' };
-    const occasionLabels = { casual: 'Casual Dining', birthday: 'Birthday Celebration', anniversary: 'Anniversary', corporate: 'Corporate Event', party: 'Private Party' };
-    const occasion = stepData.occasion || 'casual';
-    const occasionEmoji = occasionEmojis[occasion] || '🍽️';
-    const occasionLabel = occasionLabels[occasion] || 'Casual Dining';
-    const text = `📋 *Your Reservation Summary:*\n\n🍽️ ${restaurant.name}\n👤 ${conversation.customerName || stepData.customerName || 'Guest'}\n👥 ${stepData.guests} Guests\n${occasionEmoji} ${occasionLabel}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)}\n🕐 ${(0, dateHelpers_1.formatTime)(stepData.time)}\n\nDoes everything look good?`;
+    const occLabels = {
+        casual: 'Consultation & Checkup 🩺',
+        birthday: 'Teeth Whitening ✨',
+        anniversary: 'Anniversary Special 🥂',
+        corporate: 'Aligners & Braces 🦷',
+        party: 'Root Canal & Implants 💉'
+    };
+    const treatmentLabel = occLabels[stepData.occasion || 'casual'] || 'Consultation & Checkup 🩺';
+    const text = `📋 *Your Appointment Summary:*\n\n🩺 ${restaurant.name}\n👤 ${conversation.customerName || stepData.customerName || 'Patient'}\n✨ ${treatmentLabel}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)}\n🕐 ${(0, dateHelpers_1.formatTime)(stepData.time)}\n\nDoes everything look good?`;
     await (0, sender_1.sendButtons)(restaurant, phone, text, [
         { id: 'confirm_yes', title: 'Confirm ✅' },
         { id: 'confirm_change', title: 'Change ↩️' },

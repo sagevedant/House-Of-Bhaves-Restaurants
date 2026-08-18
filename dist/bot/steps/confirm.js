@@ -12,6 +12,7 @@ const makeIntegration_1 = require("../../services/makeIntegration");
 const dateHelpers_1 = require("../../utils/dateHelpers");
 const slotExtractor_1 = require("../../ai/slotExtractor");
 const datetime_1 = require("./datetime");
+const guests_1 = require("./guests");
 async function handleConfirm(event, conversation, restaurant, stepData) {
     const phone = event.from;
     if (event.type === 'button_reply') {
@@ -19,13 +20,9 @@ async function handleConfirm(event, conversation, restaurant, stepData) {
             return { nextStep: 'finalized', stepData };
         }
         if (event.buttonId === 'confirm_change') {
-            await (0, sender_1.sendText)(restaurant, phone, 'No worries! Let\'s start fresh 🔄');
-            await (0, sender_1.sendButtons)(restaurant, phone, '👥 How many guests will be dining?\n\nTap a button or type any number:', [
-                { id: 'pax_2', title: '2 People' },
-                { id: 'pax_4', title: '4 People' },
-                { id: 'pax_6plus', title: '6+ Group' },
-            ]);
-            return { nextStep: 'guests', stepData: {} };
+            await (0, sender_1.sendText)(restaurant, phone, 'No worries! Let\'s select your treatment again 🔄');
+            await (0, guests_1.sendOccasionPrompt)(restaurant, phone);
+            return { nextStep: 'occasion', stepData: { guests: 1 } };
         }
     }
     if (event.type === 'text') {
@@ -40,12 +37,12 @@ async function handleConfirm(event, conversation, restaurant, stepData) {
 }
 async function handleFinalize(event, conversation, restaurant, stepData) {
     const code = await (0, reservationCode_1.generateReservationCode)(restaurant.prefix);
-    const customerName = conversation.customerName || stepData.customerName || 'Guest';
+    const customerName = conversation.customerName || stepData.customerName || 'Patient';
     const [reservation] = await connection_1.db.insert(schema_1.reservations).values({
         restaurantId: restaurant.id,
         customerName,
         customerPhone: conversation.phone,
-        guests: stepData.guests,
+        guests: stepData.guests || 1,
         occasion: stepData.occasion || 'casual',
         date: stepData.date,
         time: stepData.time,
@@ -53,14 +50,14 @@ async function handleFinalize(event, conversation, restaurant, stepData) {
         stage: 'booked',
         specialRequest: stepData.specialRequest || null,
     }).returning();
-    // Also insert into commercial bookings table if client exists
+    // Insert into commercial bookings table if client exists
     const clientMatch = await connection_1.db.select().from(schema_1.clients).where((0, drizzle_orm_1.eq)(schema_1.clients.slug, restaurant.slug)).limit(1);
     if (clientMatch.length > 0) {
         await connection_1.db.insert(schema_1.bookings).values({
             clientId: clientMatch[0].id,
             customerName,
             customerPhone: conversation.phone,
-            guests: stepData.guests,
+            guests: stepData.guests || 1,
             occasion: stepData.occasion || 'casual',
             date: stepData.date,
             time: stepData.time,
@@ -78,7 +75,7 @@ async function handleFinalize(event, conversation, restaurant, stepData) {
         restaurantName: restaurant.name,
         customerName,
         customerPhone: conversation.phone,
-        guests: stepData.guests,
+        guests: stepData.guests || 1,
         occasion: stepData.occasion || 'casual',
         date: stepData.date,
         time: stepData.time,
@@ -86,16 +83,18 @@ async function handleFinalize(event, conversation, restaurant, stepData) {
         stage: 'booked',
         timestamp: new Date().toISOString(),
     });
-    const occasionEmojis = { casual: '🍽️', birthday: '🎂', anniversary: '🥂', corporate: '💼', party: '🎉' };
-    const occasionLabels = { casual: 'Casual Dining', birthday: 'Birthday Celebration', anniversary: 'Anniversary', corporate: 'Corporate Event', party: 'Private Party' };
-    const occasionBonuses = { birthday: '\n🎂 Complimentary cake & decoration included!', anniversary: '\n🥂 Special candlelight setup arranged!' };
-    const occasionEmoji = occasionEmojis[stepData.occasion || 'casual'] || '🍽️';
-    const occasionLabel = occasionLabels[stepData.occasion || 'casual'] || 'Casual Dining';
-    const occasionBonus = occasionBonuses[stepData.occasion || 'casual'] || '';
+    const occLabels = {
+        casual: 'Consultation & Checkup',
+        birthday: 'Teeth Whitening',
+        anniversary: 'Anniversary Special',
+        corporate: 'Aligners & Braces',
+        party: 'Root Canal & Implants'
+    };
+    const treatmentType = occLabels[stepData.occasion || 'casual'] || 'Consultation';
     if (restaurant.managerPhone) {
-        await (0, sender_1.sendText)(restaurant, restaurant.managerPhone, `🔔 *New Reservation Alert!*\n\n👤 ${customerName}\n📱 +${conversation.phone}\n👥 ${stepData.guests} Guests · ${occasionEmoji} ${occasionLabel}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)} · ${(0, dateHelpers_1.formatTime)(stepData.time)}\n🎫 ${code}`);
+        await (0, sender_1.sendText)(restaurant, restaurant.managerPhone, `🔔 *New Dental Appointment Alert!*\n\n👤 ${customerName}\n📱 +${conversation.phone}\n🩺 ${treatmentType}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)} · ${(0, dateHelpers_1.formatTime)(stepData.time)}\n🎫 ${code}`);
     }
-    await (0, sender_1.sendText)(restaurant, conversation.phone, `✅ *Table Reserved!*\n\n🎫 Booking Code: *${code}*\n🍽️ ${restaurant.name}\n👤 ${customerName}\n👥 ${stepData.guests} Guests\n${occasionEmoji} ${occasionLabel}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)} · ${(0, dateHelpers_1.formatTime)(stepData.time)}${occasionBonus}\n\nShow this code at the reception. See you soon! 🎉`);
+    await (0, sender_1.sendText)(restaurant, conversation.phone, `✅ *Appointment Reserved!*\n\n🎫 Booking Code: *${code}*\n🩺 ${restaurant.name}\n👤 ${customerName}\n✨ ${treatmentType}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)} · ${(0, dateHelpers_1.formatTime)(stepData.time)}\n\nPlease show this code at the clinic reception. See you soon! 😊`);
     return { nextStep: 'finalized', stepData };
 }
 async function handlePostFinalize(event, conversation, restaurant, stepData) {

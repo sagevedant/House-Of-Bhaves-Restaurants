@@ -42,14 +42,14 @@ export async function handleDateTimeDate(
   if (date) {
     const day = getDayName(date).toLowerCase();
     if (restaurant.closedDays?.toLowerCase().includes(day)) {
-      await sendText(restaurant, phone, `Sorry, we're closed on ${getDayName(date)}s! Please pick another day 🙏`);
+      await sendText(restaurant, phone, `Sorry, our clinic is closed on ${getDayName(date)}s! Please pick another day 🙏`);
       await sendDatePrompt(restaurant, phone);
       return { nextStep: 'datetime_date', stepData };
     }
 
-    const slots = getAvailableTimeSlots(date, restaurant.openingHoursLunch || '', restaurant.openingHoursDinner || '19:00-00:30');
+    const slots = getAvailableTimeSlots(date, restaurant.openingHoursLunch || '10:00-14:00', restaurant.openingHoursDinner || '17:00-21:00');
     if (!slots || slots.length === 0 || slots.every(s => s.slots.length === 0)) {
-      await sendText(restaurant, phone, `All slots for ${formatDate(date)} are full or closed! How about another day? 🌟`);
+      await sendText(restaurant, phone, `All OPD slots for ${formatDate(date)} are full or closed! How about another day? 🌟`);
       await sendDatePrompt(restaurant, phone);
       return { nextStep: 'datetime_date', stepData };
     }
@@ -64,12 +64,12 @@ export async function handleDateTimeDate(
 }
 
 export async function sendTimePrompt(restaurant: Restaurant, phone: string, date: string) {
-  const lunchHours = restaurant.openingHoursLunch !== null && restaurant.openingHoursLunch !== undefined ? restaurant.openingHoursLunch : '';
-  const dinnerHours = restaurant.openingHoursDinner || '19:00-00:30';
+  const lunchHours = restaurant.openingHoursLunch !== null && restaurant.openingHoursLunch !== undefined ? restaurant.openingHoursLunch : '10:00-14:00';
+  const dinnerHours = restaurant.openingHoursDinner || '17:00-21:00';
 
   const slots = getAvailableTimeSlots(date, lunchHours, dinnerHours);
   const sections = slots.filter(s => s.slots.length > 0).map(s => ({
-    title: s.period === 'Lunch' ? '🌞 Lunch Service' : '🌙 Dinner Service',
+    title: s.period === 'Lunch' ? '🌞 Morning OPD (10 AM - 2 PM)' : '🌙 Evening OPD (5 PM - 9 PM)',
     rows: s.slots.map(slot => ({
       id: `time_${slot.replace(':', '_')}`,
       title: formatTime(slot)
@@ -77,9 +77,9 @@ export async function sendTimePrompt(restaurant: Restaurant, phone: string, date
   }));
   
   if (sections.length > 0) {
-    await sendList(restaurant, phone, '🕐 Select your preferred time slot:', 'Select Time', sections);
+    await sendList(restaurant, phone, '🕐 Select your preferred OPD time slot:', 'Select Time', sections);
   } else {
-    await sendText(restaurant, phone, `No available slots for ${formatDate(date)}. Please select another day!`);
+    await sendText(restaurant, phone, `No available OPD slots for ${formatDate(date)}. Please select another day!`);
   }
 }
 
@@ -118,14 +118,17 @@ export async function handleDateTimeTime(
 }
 
 export async function sendConfirmPrompt(restaurant: Restaurant, phone: string, stepData: StepData, conversation: Conversation) {
-  const occasionEmojis: Record<string, string> = { casual: '🍽️', birthday: '🎂', anniversary: '🥂', corporate: '💼', party: '🎉' };
-  const occasionLabels: Record<string, string> = { casual: 'Casual Dining', birthday: 'Birthday Celebration', anniversary: 'Anniversary', corporate: 'Corporate Event', party: 'Private Party' };
+  const occLabels: Record<string, string> = { 
+    casual: 'Consultation & Checkup 🩺', 
+    birthday: 'Teeth Whitening ✨', 
+    anniversary: 'Anniversary Special 🥂', 
+    corporate: 'Aligners & Braces 🦷', 
+    party: 'Root Canal & Implants 💉' 
+  };
   
-  const occasion = stepData.occasion || 'casual';
-  const occasionEmoji = occasionEmojis[occasion] || '🍽️';
-  const occasionLabel = occasionLabels[occasion] || 'Casual Dining';
+  const treatmentLabel = occLabels[stepData.occasion || 'casual'] || 'Consultation & Checkup 🩺';
   
-  const text = `📋 *Your Reservation Summary:*\n\n🍽️ ${restaurant.name}\n👤 ${conversation.customerName || stepData.customerName || 'Guest'}\n👥 ${stepData.guests} Guests\n${occasionEmoji} ${occasionLabel}\n📅 ${formatDate(stepData.date!)}\n🕐 ${formatTime(stepData.time!)}\n\nDoes everything look good?`;
+  const text = `📋 *Your Appointment Summary:*\n\n🩺 ${restaurant.name}\n👤 ${conversation.customerName || stepData.customerName || 'Patient'}\n✨ ${treatmentLabel}\n📅 ${formatDate(stepData.date!)}\n🕐 ${formatTime(stepData.time!)}\n\nDoes everything look good?`;
   
   await sendButtons(restaurant, phone, text, [
     { id: 'confirm_yes', title: 'Confirm ✅' },
