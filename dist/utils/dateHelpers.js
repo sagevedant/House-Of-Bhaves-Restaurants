@@ -18,9 +18,10 @@ exports.isWithinOperatingHours = isWithinOperatingHours;
 exports.getAvailableTimeSlots = getAvailableTimeSlots;
 exports.resolveRelativeDay = resolveRelativeDay;
 exports.resolveDateInput = resolveDateInput;
+
 function nowIST() {
     const date = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+    const istOffset = 5.5 * 60 * 60 * 1000;
     return new Date(date.getTime() + date.getTimezoneOffset() * 60 * 1000 + istOffset);
 }
 function toIST(date) {
@@ -111,6 +112,21 @@ function isWithinOperatingHours(time24, lunchHours, dinnerHours) {
     }
     return false;
 }
+
+/**
+ * FIX (logic bug): slots that wrap past midnight (e.g. dinner "19:00-00:30")
+ * previously stored display-corrected strings like "00:30" and then filtered
+ * "today" slots via plain string comparison (`s >= nowTime`). Lexically,
+ * "00:30" < "19:00", so a genuinely-future post-midnight slot would be
+ * incorrectly dropped (or an already-past slot incorrectly kept) depending
+ * on current time — a bug that only manifests late at night and is easy to
+ * miss in testing.
+ *
+ * Fix: track each slot's *actual minutes-since-midnight-of-the-lunch/dinner-
+ * window-start* (allowing values >= 1440 for post-midnight slots) alongside
+ * its display string, and filter using that numeric value instead of the
+ * display string.
+ */
 function getAvailableTimeSlots(date, lunchHours, dinnerHours) {
     const generateSlots = (startEnd) => {
         if (!startEnd || !startEnd.includes('-'))
@@ -123,13 +139,16 @@ function getAvailableTimeSlots(date, lunchHours, dinnerHours) {
         let [eh, em] = end.split(':').map(Number);
         if (isNaN(h) || isNaN(m) || isNaN(eh) || isNaN(em))
             return [];
-        // Handle midnight wrap-around (e.g. 19:00 to 00:30 or 01:30 AM)
         if (eh < h || (eh === h && em < m)) {
             eh += 24;
         }
         while (h < eh || (h === eh && m <= em)) {
             const displayH = h >= 24 ? h - 24 : h;
-            slots.push(`${displayH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+            const display = `${displayH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+            // minutesFromWindowStart lets us compare "is this slot still in the
+            // future" using arithmetic instead of lexical string comparison.
+            const minutesFromWindowStart = h * 60 + m;
+            slots.push({ display, minutesFromWindowStart });
             m += 30;
             if (m >= 60) {
                 h += 1;
@@ -142,16 +161,30 @@ function getAvailableTimeSlots(date, lunchHours, dinnerHours) {
     let dinnerSlots = generateSlots(dinnerHours);
     if (date === todayIST()) {
         const nowTime = currentTimeIST();
-        lunchSlots = lunchSlots.filter(s => s >= nowTime);
-        dinnerSlots = dinnerSlots.filter(s => s >= nowTime);
+        const [nowH, nowM] = nowTime.split(':').map(Number);
+        const nowMinutes = nowH * 60 + nowM;
+        // A post-midnight slot (minutesFromWindowStart >= 1440) is only "past"
+        // if we've also wrapped past midnight in real time relative to the
+        // window; since both lunch and dinner windows start same-day, we
+        // compare against nowMinutes directly — values >=1440 always compare
+        // as "still ahead" today, which is correct: e.g. dinner window
+        // 19:00-00:30 with now=21:00 (1260 min) should keep the 00:30 slot
+        // (1470 min), which now correctly passes 1470 >= 1260.
+        // If "now" is itself past midnight (e.g. 00:15 the next calendar day),
+        // todayIST() would already refer to that new day and the dinner window
+        // from the *previous* day is no longer relevant, so no special-casing
+        // needed beyond straightforward minute arithmetic here.
+        lunchSlots = lunchSlots.filter(s => s.minutesFromWindowStart >= nowMinutes);
+        dinnerSlots = dinnerSlots.filter(s => s.minutesFromWindowStart >= nowMinutes);
     }
     const result = [];
     if (lunchSlots.length > 0)
-        result.push({ period: 'Lunch', slots: lunchSlots });
+        result.push({ period: 'Lunch', slots: lunchSlots.map(s => s.display) });
     if (dinnerSlots.length > 0)
-        result.push({ period: 'Dinner', slots: dinnerSlots });
+        result.push({ period: 'Dinner', slots: dinnerSlots.map(s => s.display) });
     return result;
 }
+
 function resolveRelativeDay(input) {
     return resolveDateInput(input);
 }
@@ -163,7 +196,6 @@ function resolveDateInput(input) {
         return tomorrowIST();
     if (['day after', 'parson', 'parso', 'day after tomorrow'].includes(i))
         return dayAfterTomorrowIST();
-    // Try parsing month names and numbers (e.g. "3rd august", "3 aug", "august 3")
     const months = {
         jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3,
         may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7,
@@ -185,7 +217,6 @@ function resolveDateInput(input) {
         const dd = String(d.getDate()).padStart(2, '0');
         return `${yyyy}-${mm}-${dd}`;
     }
-    // Try parsing weekday names (e.g. "monday", "friday", "mon", "aug 3")
     const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const targetDayIdx = weekdays.indexOf(i);
     if (targetDayIdx !== -1) {

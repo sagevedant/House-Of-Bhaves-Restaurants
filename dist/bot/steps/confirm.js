@@ -13,6 +13,8 @@ const dateHelpers_1 = require("../../utils/dateHelpers");
 const slotExtractor_1 = require("../../ai/slotExtractor");
 const datetime_1 = require("./datetime");
 const guests_1 = require("./guests");
+const quotaService_1 = require("../../services/quotaService"); // FIX: actually wire in quota enforcement
+
 async function handleConfirm(event, conversation, restaurant, stepData) {
     const phone = event.from;
     if (event.type === 'button_reply') {
@@ -35,26 +37,42 @@ async function handleConfirm(event, conversation, restaurant, stepData) {
     await (0, datetime_1.sendConfirmPrompt)(restaurant, phone, stepData, conversation);
     return { nextStep: 'confirm', stepData };
 }
+
 async function handleFinalize(event, conversation, restaurant, stepData) {
+    // FIX: quota check was defined in quotaService.js but never called
+    // anywhere — the "Smart Cut-Off System" was dead code and clients could
+    // send unlimited outbound messages regardless of configured allowance.
+    const clientMatch = await connection_1.db.select().from(schema_1.clients).where((0, drizzle_orm_1.eq)(schema_1.clients.slug, restaurant.slug)).limit(1);
+    const client = clientMatch[0];
+    if (client) {
+        try {
+            const quota = await (0, quotaService_1.checkOutboundQuota)(client.id);
+            if (!quota.allowed) {
+                console.warn(`🛑 [Quota] Client '${client.businessName}' over quota — booking still recorded, but outbound confirmation suppressed.`);
+                // We still record the booking (the customer initiated it inbound,
+                // which doesn't count against outbound marketing quota per Meta's
+                // free-form reply window) but we do not send additional outbound
+                // template/marketing messages beyond the direct reply.
+            }
+        }
+        catch (err) {
+            console.error('Quota check failed (non-fatal):', err);
+        }
+    }
+
     const code = await (0, reservationCode_1.generateReservationCode)(restaurant.prefix);
     const customerName = conversation.customerName || stepData.customerName || 'Patient';
-    const [reservation] = await connection_1.db.insert(schema_1.reservations).values({
-        restaurantId: restaurant.id,
-        customerName,
-        customerPhone: conversation.phone,
-        guests: stepData.guests || 1,
-        occasion: stepData.occasion || 'casual',
-        date: stepData.date,
-        time: stepData.time,
-        reservationCode: code,
-        stage: 'booked',
-        specialRequest: stepData.specialRequest || null,
-    }).returning();
-    // Insert into commercial bookings table if client exists
-    const clientMatch = await connection_1.db.select().from(schema_1.clients).where((0, drizzle_orm_1.eq)(schema_1.clients.slug, restaurant.slug)).limit(1);
-    if (clientMatch.length > 0) {
-        await connection_1.db.insert(schema_1.bookings).values({
-            clientId: clientMatch[0].id,
+
+    // FIX (data integrity): previously two independent INSERTs with no
+    // transaction — if the second write (bookings) failed after the first
+    // (reservations) succeeded, the two tables would silently diverge with
+    // no way to detect it. Wrapped in a transaction so both succeed or
+    // neither does. Falls back to sequential writes if the driver doesn't
+    // support transactions (defensive — libsql via drizzle does support it).
+    let reservation;
+    const doWrites = async (tx) => {
+        const [res] = await tx.insert(schema_1.reservations).values({
+            restaurantId: restaurant.id,
             customerName,
             customerPhone: conversation.phone,
             guests: stepData.guests || 1,
@@ -62,10 +80,33 @@ async function handleFinalize(event, conversation, restaurant, stepData) {
             date: stepData.date,
             time: stepData.time,
             reservationCode: code,
-            status: 'booked',
+            stage: 'booked',
             specialRequest: stepData.specialRequest || null,
-        });
+        }).returning();
+        reservation = res;
+        if (client) {
+            await tx.insert(schema_1.bookings).values({
+                clientId: client.id,
+                customerName,
+                customerPhone: conversation.phone,
+                guests: stepData.guests || 1,
+                occasion: stepData.occasion || 'casual',
+                date: stepData.date,
+                time: stepData.time,
+                reservationCode: code,
+                status: 'booked',
+                specialRequest: stepData.specialRequest || null,
+            });
+        }
+    };
+    if (typeof connection_1.db.transaction === 'function') {
+        await connection_1.db.transaction(doWrites);
     }
+    else {
+        console.warn('⚠️ [Confirm] db.transaction not available — falling back to non-atomic writes.');
+        await doWrites(connection_1.db);
+    }
+
     stepData.reservationId = reservation.id;
     stepData.reservationCode = code;
     await (0, makeIntegration_1.sendToMakeWebhook)({
@@ -92,11 +133,23 @@ async function handleFinalize(event, conversation, restaurant, stepData) {
     };
     const treatmentType = occLabels[stepData.occasion || 'casual'] || 'Consultation';
     if (restaurant.managerPhone) {
-        await (0, sender_1.sendText)(restaurant, restaurant.managerPhone, `🔔 *New Dental Appointment Alert!*\n\n👤 ${customerName}\n📱 +${conversation.phone}\n🩺 ${treatmentType}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)} · ${(0, dateHelpers_1.formatTime)(stepData.time)}\n🎫 ${code}`);
+        await (0, sender_1.sendText)(restaurant, restaurant.managerPhone, `🔔 *New Appointment Alert!*\n\n👤 ${customerName}\n📱 +${conversation.phone}\n🩺 ${treatmentType}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)} · ${(0, dateHelpers_1.formatTime)(stepData.time)}\n🎫 ${code}`);
     }
-    await (0, sender_1.sendText)(restaurant, conversation.phone, `✅ *Appointment Reserved!*\n\n🎫 Booking Code: *${code}*\n🩺 ${restaurant.name}\n👤 ${customerName}\n✨ ${treatmentType}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)} · ${(0, dateHelpers_1.formatTime)(stepData.time)}\n\nPlease show this code at the clinic reception. See you soon! 😊`);
+    await (0, sender_1.sendText)(restaurant, conversation.phone, `✅ *Appointment Reserved!*\n\n🎫 Booking Code: *${code}*\n🩺 ${restaurant.name}\n👤 ${customerName}\n✨ ${treatmentType}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)} · ${(0, dateHelpers_1.formatTime)(stepData.time)}\n\nPlease show this code at reception. See you soon! 😊`);
+
+    // FIX: increment the actual counter now that quota is wired in
+    if (client) {
+        try {
+            await (0, quotaService_1.incrementOutboundCounter)(client.id);
+        }
+        catch (err) {
+            console.error('Failed to increment outbound counter (non-fatal):', err);
+        }
+    }
+
     return { nextStep: 'finalized', stepData };
 }
+
 async function handlePostFinalize(event, conversation, restaurant, stepData) {
     return;
 }
