@@ -8,12 +8,22 @@ import { sendToMakeWebhook } from './services/makeIntegration';
 import { eq, desc, and } from 'drizzle-orm';
 import { startScheduler } from './scheduler/cron';
 import { processPendingReviewQueue, scheduleSameDayReview } from './services/reviewEngine';
+import { requireAdminAuth } from './middleware/auth';
+import { escapeHtml, escapeCsvField } from './utils/escape';
+import { generateReservationCode } from './utils/reservationCode';
 
 const app = express();
+
+// FIX (critical): capture the raw request body on the webhook route so
+// webhook.ts can verify Meta's X-Hub-Signature-256 HMAC. Only the /webhook
+// path needs this; other routes use plain json parsing.
+app.use('/webhook', express.json({
+  verify: (req, _res, buf) => { req.rawBody = buf; }
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Mount webhook router
+// Mount webhook router (signature verification happens inside)
 app.use('/webhook', webhookRouter);
 
 // Health check
@@ -27,12 +37,13 @@ app.get('/demo', (req, res) => {
 });
 
 // Meta App Compliance Routes (Privacy Policy, Terms of Service, User Data Deletion)
+// These are required to be publicly reachable by Meta's app review — left unauthenticated intentionally.
 app.get('/privacy', (req, res) => {
   res.send(`
     <!DOCTYPE html><html><head><title>Privacy Policy - House of Bhaves (HOB)</title><style>body{font-family:sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:0 auto;color:#222;}</style></head>
     <body><h1>Privacy Policy</h1><p><strong>House of Bhaves (HOB)</strong> respects your privacy. We process customer names, phone numbers, and reservation details solely for table booking and restaurant communication via WhatsApp.</p>
     <h2>Data Collection & Usage</h2><p>Data collected via WhatsApp is strictly used for managing table reservations, sending booking confirmations, and optional dining reminders.</p>
-    <h2>Data Protection</h2><p>We do not sell or share personal data with third parties. For data deletion requests, contact us at bhavevedant18@gmail.com.</p></body></html>
+    <h2>Data Protection</h2><p>We do not sell or share personal data with third parties. For data deletion requests, contact us via the support address configured for your account.</p></body></html>
   `);
 });
 
@@ -46,22 +57,36 @@ app.get('/terms', (req, res) => {
 app.get('/deletion', (req, res) => {
   res.send(`
     <!DOCTYPE html><html><head><title>User Data Deletion - House of Bhaves (HOB)</title><style>body{font-family:sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:0 auto;color:#222;}</style></head>
-    <body><h1>User Data Deletion Instructions</h1><p>To request deletion of your reservation data, please email <strong>bhavevedant18@gmail.com</strong> with your registered WhatsApp phone number. All data will be removed within 48 hours.</p></body></html>
+    <body><h1>User Data Deletion Instructions</h1><p>To request deletion of your reservation data, please contact the restaurant/clinic you booked with directly, or reach out via the support channel configured for your account. All data will be removed within 48 hours of a verified request.</p></body></html>
   `);
 });
 
-// CSV Export Endpoint for Restaurant Hostess Logbook
-app.get('/api/restaurant/:slug/export', async (req, res) => {
+// FIX (critical): this route previously dumped full customer PII (names,
+// phone numbers) as CSV to anyone who guessed the slug, with no auth and
+// no CSV-injection escaping. Now requires admin auth + escapes every field.
+app.get('/api/restaurant/:slug/export', requireAdminAuth, async (req, res) => {
   try {
-    const slug = req.params.slug;
+    const rawSlug = req.params.slug;
+    const slug = Array.isArray(rawSlug) ? rawSlug[0] : (rawSlug || '');
     const clientMatches = await db.select().from(clients).where(eq(clients.slug, slug)).limit(1);
     const restMatches = await db.select().from(restaurants).where(eq(restaurants.slug, slug)).limit(1);
 
     const client = clientMatches[0];
     const restaurant = restMatches[0];
-    const name = client?.businessName || restaurant?.name || 'Restaurant';
 
-    let allRes: any[] = [];
+    interface ExportRes {
+      code: string;
+      name: string;
+      phone: string;
+      guests: number;
+      occasion: string;
+      date: string;
+      time: string;
+      status: string;
+      createdAt: string;
+    }
+
+    let allRes: ExportRes[] = [];
     if (client) {
       const clientBookings = await db.select().from(bookings).where(eq(bookings.clientId, client.id)).orderBy(desc(bookings.createdAt));
       allRes = clientBookings.map(b => ({
@@ -94,12 +119,23 @@ app.get('/api/restaurant/:slug/export', async (req, res) => {
 
     let csvContent = 'Reservation Code,Customer Name,Phone Number,Guests,Occasion,Date,Time,Status,Created At\n';
     for (const r of allRes) {
-      const line = `"${r.code}","${r.name}","+${r.phone}",${r.guests},"${r.occasion}","${r.date}","${r.time}","${r.status}","${r.createdAt}"\n`;
-      csvContent += line;
+      // FIX: every field escaped against CSV formula injection + embedded quotes
+      const fields = [
+        escapeCsvField(r.code),
+        escapeCsvField(r.name),
+        escapeCsvField('+' + r.phone),
+        escapeCsvField(r.guests),
+        escapeCsvField(r.occasion),
+        escapeCsvField(r.date),
+        escapeCsvField(r.time),
+        escapeCsvField(r.status),
+        escapeCsvField(r.createdAt),
+      ];
+      csvContent += fields.join(',') + '\n';
     }
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="${slug}-reservations-${new Date().toISOString().split('T')[0]}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${slug.replace(/[^a-z0-9-]/gi, '_')}-reservations-${new Date().toISOString().split('T')[0]}.csv"`);
     res.status(200).send(csvContent);
   } catch (error) {
     console.error('Export error:', error);
@@ -107,20 +143,21 @@ app.get('/api/restaurant/:slug/export', async (req, res) => {
   }
 });
 
-// Demo reservation creation endpoint
-app.post('/api/reservations/demo', async (req, res) => {
+// Demo reservation creation endpoint — auth-gated, no hardcoded customer PII
+app.post('/api/reservations/demo', requireAdminAuth, async (req, res) => {
   try {
-    const randomDigits = Math.floor(1000 + Math.random() * 9000);
-    const code = `HOB-RES-${randomDigits}`;
+    const code = await generateReservationCode('DEMO');
     
     const allRestaurants = await db.select().from(restaurants).limit(1);
     const restaurantId = allRestaurants.length > 0 ? allRestaurants[0].id : 1;
     const restaurantName = allRestaurants.length > 0 ? allRestaurants[0].name : 'House of Bhaves Rooftop & Lounge (HOB)';
 
+    // FIX: removed hardcoded real-looking customer name/phone (PII) that was
+    // previously baked into source. Demo data is now clearly synthetic.
     const [newRes] = await db.insert(reservations).values({
       restaurantId,
-      customerName: 'Vedant Bhave',
-      customerPhone: '919699533441',
+      customerName: 'Demo Guest',
+      customerPhone: '910000000000',
       guests: 4,
       occasion: 'birthday',
       date: new Date().toISOString().split('T')[0],
@@ -151,13 +188,14 @@ app.post('/api/reservations/demo', async (req, res) => {
   }
 });
 
-// Status update endpoint (handles 'seated' | 'completed' | 'no_show' | 'cancelled')
-app.post('/api/reservations/status', async (req, res) => {
+// Status update endpoint — auth-gated (was previously open to anyone)
+app.post('/api/reservations/status', requireAdminAuth, async (req, res) => {
   try {
     const { reservationId, status } = req.body;
+    const ALLOWED_STATUSES = ['booked', 'seated', 'completed', 'no_show', 'cancelled'];
     
-    if (!reservationId || !status) {
-      return res.status(400).json({ error: 'Missing reservationId or status' });
+    if (!reservationId || !status || !ALLOWED_STATUSES.includes(status)) {
+      return res.status(400).json({ error: 'Missing or invalid reservationId/status' });
     }
 
     // Update in bookings table
@@ -210,8 +248,8 @@ app.post('/api/reservations/status', async (req, res) => {
   }
 });
 
-// Agency Control API Endpoint (Same-Day Review Queue Trigger)
-app.post('/api/agency/trigger-review-queue', async (req, res) => {
+// Agency Control API Endpoint (Same-Day Review Queue Trigger) — auth-gated
+app.post('/api/agency/trigger-review-queue', requireAdminAuth, async (req, res) => {
   const result = await processPendingReviewQueue();
   res.json(result);
 });
@@ -219,7 +257,10 @@ app.post('/api/agency/trigger-review-queue', async (req, res) => {
 // ----------------------------------------------------
 // 📝 LUXURY GRAINY-TEXTURED ONBOARDING PORTAL (GET /onboard)
 // ----------------------------------------------------
-app.get('/onboard', (req, res) => {
+// FIX (critical): onboarding form was previously public — anyone could view
+// AND submit it, creating arbitrary tenants with attacker-supplied Meta
+// credentials. Now auth-gated end to end.
+app.get('/onboard', requireAdminAuth, (req, res) => {
   res.send(`
 <!DOCTYPE html>
 <html lang="en">
@@ -384,7 +425,7 @@ app.get('/onboard', (req, res) => {
       <div class="row-2">
         <div class="form-group">
           <label>Meta WhatsApp Phone Number ID (Optional)</label>
-          <input type="text" name="whatsappPhoneNumberId" placeholder="Auto-fills agency default ID if blank">
+          <input type="text" name="whatsappPhoneNumberId" placeholder="Leave blank to require manual setup">
         </div>
 
         <div class="form-group">
@@ -395,7 +436,7 @@ app.get('/onboard', (req, res) => {
 
       <div class="form-group">
         <label>Meta Permanent Access Token (Optional)</label>
-        <input type="text" name="metaAccessToken" placeholder="Auto-fills agency system token if blank">
+        <input type="password" name="metaAccessToken" placeholder="Leave blank to require manual setup">
       </div>
 
       <div class="row-2">
@@ -418,8 +459,11 @@ app.get('/onboard', (req, res) => {
   `);
 });
 
-// Client Onboarding Submission Endpoint
-app.post('/api/agency/onboard', async (req, res) => {
+// FIX (critical): was public with zero auth — anyone could create a tenant
+// pointed at arbitrary Meta credentials. Also removed the hardcoded
+// placeholder token/phone-ID fallbacks that silently let a client go live
+// with agency-wide shared credentials without anyone noticing.
+app.post('/api/agency/onboard', requireAdminAuth, async (req, res) => {
   try {
     const {
       businessName,
@@ -437,18 +481,28 @@ app.post('/api/agency/onboard', async (req, res) => {
       openingHoursDinner
     } = req.body;
 
-    if (!businessName || !slug) {
-      return res.status(400).send('Missing required fields: businessName, slug');
+    if (!businessName || !slug || !prefix) {
+      return res.status(400).send('Missing required fields: businessName, slug, prefix');
     }
 
-    const cleanSlug = slug.toLowerCase().trim().replace(/[^a-z0-9-]/g, '-');
+    const RESERVED_SLUGS = new Set(['agency', 'onboard', 'api', 'webhook', 'health', 'demo', 'privacy', 'terms', 'deletion', 'restaurant']);
+    const cleanSlug = slug.toLowerCase().trim().replace(/[^a-z0-9-]/g, '-').slice(0, 64);
+    if (!cleanSlug || RESERVED_SLUGS.has(cleanSlug)) {
+      return res.status(400).send('Invalid or reserved slug.');
+    }
+
     const today = new Date();
     const nextResetObj = new Date();
     nextResetObj.setDate(today.getDate() + 30);
     const nextResetDate = nextResetObj.toISOString().split('T')[0];
 
-    const phoneId = (whatsappPhoneNumberId && whatsappPhoneNumberId.trim()) ? whatsappPhoneNumberId.trim() : (config.whatsappPhoneNumberId || '1167895203082852');
-    const token = (metaAccessToken && metaAccessToken.trim()) ? metaAccessToken.trim() : (config.metaAccessToken || 'PLACEHOLDER_TOKEN');
+    // FIX: no more silent fallback to shared/placeholder credentials —
+    // each tenant either supplies their own creds or is created inactive
+    // pending manual credential setup, so nobody accidentally goes live
+    // sending on the agency's shared WhatsApp number without knowing it.
+    const phoneId = (whatsappPhoneNumberId && typeof whatsappPhoneNumberId === 'string' && whatsappPhoneNumberId.trim()) ? whatsappPhoneNumberId.trim() : '';
+    const token = (metaAccessToken && typeof metaAccessToken === 'string' && metaAccessToken.trim()) ? metaAccessToken.trim() : '';
+    const readyToActivate = Boolean(phoneId && token);
 
     // Insert into clients table
     await db.insert(clients).values({
@@ -458,45 +512,49 @@ app.post('/api/agency/onboard', async (req, res) => {
       outboundAllowanceMonthly: 1000,
       outboundSentThisMonth: 0,
       nextMonthlyResetDate: nextResetDate,
-      whatsappPhoneNumberId: phoneId,
-      metaAccessToken: token,
-      prefix: prefix || 'HOB',
+      whatsappPhoneNumberId: phoneId || 'PENDING_SETUP',
+      metaAccessToken: token || 'PENDING_SETUP',
+      prefix,
       googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
       customWelcomeText: customWelcomeText || null,
       customMenuText: customMenuText || null,
-      active: true
+      active: readyToActivate
     });
 
     // Also insert into restaurants table (for backward compatibility)
     await db.insert(restaurants).values({
       name: businessName,
       slug: cleanSlug,
-      address: address || 'Pune',
-      whatsappPhoneNumberId: phoneId,
-      metaAccessToken: token,
-      prefix: prefix || 'HOB',
-      managerPhone: managerPhone || '919511673214',
+      address: address || '',
+      whatsappPhoneNumberId: phoneId || 'PENDING_SETUP',
+      metaAccessToken: token || 'PENDING_SETUP',
+      prefix,
+      managerPhone: managerPhone || '',
       openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '',
       openingHoursDinner: openingHoursDinner || '19:00-00:30',
       googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
       customWelcomeText: customWelcomeText || null,
       customMenuText: customMenuText || null,
-      active: true
+      active: readyToActivate
     });
 
-    console.log(`✅ [Onboarding Success] Successfully onboarded restaurant: ${businessName} (${cleanSlug})`);
+    console.log(`✅ [Onboarding] Onboarded: ${businessName} (${cleanSlug}) — active=${readyToActivate}`);
+    if (!readyToActivate) {
+      console.warn(`⚠️ [Onboarding] Client '${cleanSlug}' created INACTIVE — missing Meta credentials. Set them before enabling.`);
+    }
 
     res.redirect(`/agency?onboarded=${cleanSlug}`);
   } catch (error: any) {
     console.error('Onboarding error:', error);
-    res.status(500).send(`Onboarding Error: ${error.message}`);
+    res.status(500).send('Onboarding failed. Check server logs.');
   }
 });
 
 // ----------------------------------------------------
 // 🏛️ MASTER AGENCY DASHBOARD (GET /agency)
 // ----------------------------------------------------
-app.get('/agency', async (req, res) => {
+// FIX (critical): master dashboard (MRR, all clients) was fully public.
+app.get('/agency', requireAdminAuth, async (req, res) => {
   try {
     const clientList = await db.select().from(clients);
     
@@ -516,19 +574,21 @@ app.get('/agency', async (req, res) => {
       : clientList.map(c => {
       const tierPrice = c.billingCycle === 'quarterly' ? 'Quarterly: ₹24,999 / qtr' : 'Monthly: ₹9,999 / mo';
       const tierBadgeClass = c.billingCycle === 'quarterly' ? 'tier-quarterly' : 'tier-monthly';
+      const safeName = escapeHtml(c.businessName);
+      const safeSlug = escapeHtml(c.slug);
 
       return `
         <tr>
           <td class="client-name">
-            <strong>${c.businessName}</strong>
-            <div class="client-slug">Slug: /restaurant/${c.slug}</div>
+            <strong>${safeName}</strong>
+            <div class="client-slug">Slug: /restaurant/${safeSlug}</div>
           </td>
           <td>
-            <span class="tier-badge ${tierBadgeClass}">${(c.billingCycle || 'monthly').toUpperCase()}</span>
+            <span class="tier-badge ${tierBadgeClass}">${escapeHtml((c.billingCycle || 'monthly').toUpperCase())}${c.active ? '' : ' — <span style="color:#F87171">INACTIVE (needs Meta creds)</span>'}</span>
             <div style="font-size:11px; color:#A8A29E; margin-top:4px;">${tierPrice}</div>
           </td>
           <td>
-            <div style="font-weight:700; color:#4ADE80; font-size:13px;">⚡ Unlimited Inbound & Reviews</div>
+            <div style="font-weight:700; color:#4ADE80; font-size:13px;">${c.active ? '⚡ Live' : '⏸ Pending setup'}</div>
             <div style="font-size:11px; color:#A8A29E;">₹0.00 Meta Cost</div>
           </td>
           <td>
@@ -539,7 +599,7 @@ app.get('/agency', async (req, res) => {
             <div class="cost-note">24h Customer Service Window</div>
           </td>
           <td>
-            <a href="/restaurant/${c.slug}" target="_blank" class="btn-view-logbook">📋 Open Logbook</a>
+            <a href="/restaurant/${encodeURIComponent(c.slug)}" target="_blank" class="btn-view-logbook">📋 Open Logbook</a>
           </td>
         </tr>
       `;
@@ -790,9 +850,15 @@ app.get('/agency', async (req, res) => {
 });
 
 // Multi-tenant slug route & fallback (Checks both clients & restaurants tables safely)
-app.get('/restaurant/:slug?', async (req, res) => {
+// FIX (critical): full reservation logbook (customer names + phone numbers)
+// for any tenant was reachable by anyone who guessed a slug — a slugified
+// business name is trivially guessable. Now auth-gated + XSS-escaped.
+app.get('/restaurant/:slug?', requireAdminAuth, async (req, res) => {
   try {
-    const targetSlug = (req.params as any).slug || 'hob-restaurant';
+    const targetSlug = (req.params as any).slug || '';
+    if (!targetSlug) {
+      return res.status(400).send('Restaurant slug required.');
+    }
     
     // Check clients table first
     let clientMatches = await db.select().from(clients).where(eq(clients.slug, targetSlug)).limit(1);
@@ -801,10 +867,14 @@ app.get('/restaurant/:slug?', async (req, res) => {
     const client = clientMatches[0];
     const restaurant = restaurantMatches[0];
 
-    const displayName = client?.businessName || restaurant?.name || 'Big Bang Community (BBC)';
+    if (!client && !restaurant) {
+      return res.status(404).send('Restaurant not found.');
+    }
+
+    const displayName = client?.businessName || restaurant?.name || targetSlug;
     const displaySlug = client?.slug || restaurant?.slug || targetSlug;
     const clientId = client?.id;
-    const restaurantId = restaurant?.id || 1;
+    const restaurantId = restaurant?.id;
 
     // Query bookings / reservations cleanly
     let allRes: any[] = [];
@@ -900,35 +970,36 @@ app.get('/restaurant/:slug?', async (req, res) => {
                              r.occasion?.toLowerCase() === 'party' ? '🎉 ' :
                              r.occasion?.toLowerCase() === 'corporate' ? '💼 ' : '🍽️ ';
         
+        // FIX: escapeHtml applied to customerName, phone, code, occasion before interpolating
         return `
-          <div class="reservation-card" data-status="${r.stage}" data-search="${(r.customerName + ' ' + r.customerPhone + ' ' + r.reservationCode).toLowerCase()}">
+          <div class="reservation-card" data-status="${escapeHtml(r.stage)}" data-search="${escapeHtml((r.customerName + ' ' + r.customerPhone + ' ' + r.reservationCode).toLowerCase())}">
             <div class="card-content">
               ${stickyNote}
               <div class="guest-info">
-                <h3 class="guest-name">${r.customerName}</h3>
-                <a href="https://wa.me/${r.customerPhone}" class="guest-phone" target="_blank">+${r.customerPhone}</a>
+                <h3 class="guest-name">${escapeHtml(r.customerName)}</h3>
+                <a href="https://wa.me/${encodeURIComponent(r.customerPhone)}" class="guest-phone" target="_blank">+${escapeHtml(r.customerPhone)}</a>
               </div>
               
               <div class="details-grid">
                 <div class="detail-item">
                   <span class="detail-label">Guests</span>
-                  <span class="detail-value">👥 ${r.guests}</span>
+                  <span class="detail-value">👥 ${escapeHtml(r.guests)}</span>
                 </div>
                 <div class="detail-item">
                   <span class="detail-label">Occasion</span>
-                  <span class="detail-value">${occasionEmoji}${r.occasion || 'None'}</span>
+                  <span class="detail-value">${occasionEmoji}${escapeHtml(r.occasion || 'None')}</span>
                 </div>
                 <div class="detail-item">
                   <span class="detail-label">Date & Time</span>
-                  <span class="detail-value">📅 ${r.date} @ ${r.time}</span>
+                  <span class="detail-value">📅 ${escapeHtml(r.date)} @ ${escapeHtml(r.time)}</span>
                 </div>
                 <div class="detail-item">
                   <span class="detail-label">Code</span>
-                  <span class="detail-value code-highlight">${r.reservationCode}</span>
+                  <span class="detail-value code-highlight">${escapeHtml(r.reservationCode)}</span>
                 </div>
               </div>
               
-              <div class="stamp-badge ${badgeClass}">${(r.stage || 'booked').replace('_', '-').toUpperCase()}</div>
+              <div class="stamp-badge ${badgeClass}">${escapeHtml((r.stage || 'booked').replace('_', '-').toUpperCase())}</div>
               
               ${actions}
             </div>
@@ -942,8 +1013,8 @@ app.get('/restaurant/:slug?', async (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${displayName} | Hostess Ledger</title>
-  <meta name="description" content="Private Booking Ledger for ${displayName}">
+  <title>${escapeHtml(displayName)} | Hostess Ledger</title>
+  <meta name="description" content="Private Booking Ledger for ${escapeHtml(displayName)}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1174,11 +1245,11 @@ app.get('/restaurant/:slug?', async (req, res) => {
   <div class="container">
     <div class="header-card">
       <div class="restaurant-title">
-        <h1>${displayName}</h1>
-        <p>Hostess Front-Desk Ledger • URL Slug: /restaurant/${displaySlug}</p>
+        <h1>${escapeHtml(displayName)}</h1>
+        <p>Hostess Front-Desk Ledger • URL Slug: /restaurant/${escapeHtml(displaySlug)}</p>
       </div>
       <div class="header-right">
-        <a href="/api/restaurant/${displaySlug}/export" class="btn-export">📥 Export CSV</a>
+        <a href="/api/restaurant/${encodeURIComponent(displaySlug)}/export" class="btn-export">📥 Export CSV</a>
         <div class="live-badge">
           <div class="pulse"></div> Live Reception Sync
         </div>
@@ -1315,11 +1386,12 @@ async function main() {
   
   app.listen(config.PORT, () => {
     console.log(`🚀 House of Bhaves Agency Platform running on port ${config.PORT}`);
-    console.log(`🏛️ Master Agency Dashboard: http://localhost:${config.PORT}/agency`);
-    console.log(`📝 Onboard Restaurant Portal: http://localhost:${config.PORT}/onboard`);
-    console.log(`📋 Client Logbook: http://localhost:${config.PORT}/restaurant/hob-restaurant`);
+    console.log(`🔒 Admin routes (/agency, /onboard, /restaurant/*) require HTTP Basic Auth.`);
     console.log(`🔗 Webhook: http://localhost:${config.PORT}/webhook`);
   });
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error('❌ Fatal startup error:', err);
+  process.exit(1);
+});

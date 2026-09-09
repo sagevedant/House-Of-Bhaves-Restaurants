@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.escapeHtml = escapeHtml;
 exports.escapeCsvField = escapeCsvField;
-
 /**
  * FIX (critical): customer names come from WhatsApp profile display names —
  * fully attacker-controlled free text — and were previously interpolated
@@ -19,7 +18,6 @@ function escapeHtml(input) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 }
-
 /**
  * FIX (critical): CSV export previously interpolated raw fields into quoted
  * CSV strings with no escaping of embedded quotes, and no protection

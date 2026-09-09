@@ -14,7 +14,6 @@ const slotExtractor_1 = require("../../ai/slotExtractor");
 const datetime_1 = require("./datetime");
 const guests_1 = require("./guests");
 const quotaService_1 = require("../../services/quotaService"); // FIX: actually wire in quota enforcement
-
 async function handleConfirm(event, conversation, restaurant, stepData) {
     const phone = event.from;
     if (event.type === 'button_reply') {
@@ -37,7 +36,6 @@ async function handleConfirm(event, conversation, restaurant, stepData) {
     await (0, datetime_1.sendConfirmPrompt)(restaurant, phone, stepData, conversation);
     return { nextStep: 'confirm', stepData };
 }
-
 async function handleFinalize(event, conversation, restaurant, stepData) {
     // FIX: quota check was defined in quotaService.js but never called
     // anywhere — the "Smart Cut-Off System" was dead code and clients could
@@ -59,10 +57,8 @@ async function handleFinalize(event, conversation, restaurant, stepData) {
             console.error('Quota check failed (non-fatal):', err);
         }
     }
-
     const code = await (0, reservationCode_1.generateReservationCode)(restaurant.prefix);
     const customerName = conversation.customerName || stepData.customerName || 'Patient';
-
     // FIX (data integrity): previously two independent INSERTs with no
     // transaction — if the second write (bookings) failed after the first
     // (reservations) succeeded, the two tables would silently diverge with
@@ -106,7 +102,9 @@ async function handleFinalize(event, conversation, restaurant, stepData) {
         console.warn('⚠️ [Confirm] db.transaction not available — falling back to non-atomic writes.');
         await doWrites(connection_1.db);
     }
-
+    if (!reservation) {
+        throw new Error('Failed to record reservation');
+    }
     stepData.reservationId = reservation.id;
     stepData.reservationCode = code;
     await (0, makeIntegration_1.sendToMakeWebhook)({
@@ -136,7 +134,6 @@ async function handleFinalize(event, conversation, restaurant, stepData) {
         await (0, sender_1.sendText)(restaurant, restaurant.managerPhone, `🔔 *New Appointment Alert!*\n\n👤 ${customerName}\n📱 +${conversation.phone}\n🩺 ${treatmentType}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)} · ${(0, dateHelpers_1.formatTime)(stepData.time)}\n🎫 ${code}`);
     }
     await (0, sender_1.sendText)(restaurant, conversation.phone, `✅ *Appointment Reserved!*\n\n🎫 Booking Code: *${code}*\n🩺 ${restaurant.name}\n👤 ${customerName}\n✨ ${treatmentType}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)} · ${(0, dateHelpers_1.formatTime)(stepData.time)}\n\nPlease show this code at reception. See you soon! 😊`);
-
     // FIX: increment the actual counter now that quota is wired in
     if (client) {
         try {
@@ -146,10 +143,8 @@ async function handleFinalize(event, conversation, restaurant, stepData) {
             console.error('Failed to increment outbound counter (non-fatal):', err);
         }
     }
-
     return { nextStep: 'finalized', stepData };
 }
-
 async function handlePostFinalize(event, conversation, restaurant, stepData) {
     return;
 }

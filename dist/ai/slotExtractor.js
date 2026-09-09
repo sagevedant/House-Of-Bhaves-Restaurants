@@ -4,7 +4,6 @@ exports.fallbackExtract = fallbackExtract;
 exports.extractSlots = extractSlots;
 const generative_ai_1 = require("@google/generative-ai");
 const config_1 = require("../config");
-
 function fallbackExtract(message, currentDate) {
     const lower = message.toLowerCase();
     const slots = {};
@@ -25,7 +24,6 @@ function fallbackExtract(message, currentDate) {
         slots.date = currentDate;
     return slots;
 }
-
 // FIX: previously `JSON.parse(jsonStr)` was cast directly to ExtractedSlots
 // with zero runtime validation. A hallucinated enum value, malformed date,
 // or garbage number from the LLM would flow straight into DB writes and
@@ -37,7 +35,6 @@ const VALID_INTENTS = new Set(['book', 'modify', 'cancel', 'question', 'greeting
 const VALID_LANGUAGES = new Set(['en', 'hi', 'hinglish']);
 const DATE_RE = /^(\d{4}-\d{2}-\d{2}|<tomorrow>)$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
-
 function isValidCalendarDate(dateStr) {
     if (dateStr === '<tomorrow>')
         return true;
@@ -49,38 +46,37 @@ function isValidCalendarDate(dateStr) {
     const daysInMonth = new Date(y, m, 0).getDate();
     return d >= 1 && d <= daysInMonth;
 }
-
 function sanitizeExtractedSlots(raw) {
     if (!raw || typeof raw !== 'object')
         return {};
+    const rawObj = raw;
     const out = {};
-    if (typeof raw.name === 'string' && raw.name.trim() && raw.name.length <= 100) {
-        out.name = raw.name.trim().slice(0, 100);
+    if (typeof rawObj.name === 'string' && rawObj.name.trim() && rawObj.name.length <= 100) {
+        out.name = rawObj.name.trim().slice(0, 100);
     }
-    if (typeof raw.guests === 'number' && Number.isFinite(raw.guests) && raw.guests >= 1 && raw.guests <= 100) {
-        out.guests = Math.round(raw.guests);
+    if (typeof rawObj.guests === 'number' && Number.isFinite(rawObj.guests) && rawObj.guests >= 1 && rawObj.guests <= 100) {
+        out.guests = Math.round(rawObj.guests);
     }
-    if (typeof raw.occasion === 'string' && VALID_OCCASIONS.has(raw.occasion)) {
-        out.occasion = raw.occasion;
+    if (typeof rawObj.occasion === 'string' && VALID_OCCASIONS.has(rawObj.occasion)) {
+        out.occasion = rawObj.occasion;
     }
-    if (typeof raw.date === 'string' && DATE_RE.test(raw.date) && isValidCalendarDate(raw.date)) {
-        out.date = raw.date;
+    if (typeof rawObj.date === 'string' && DATE_RE.test(rawObj.date) && isValidCalendarDate(rawObj.date)) {
+        out.date = rawObj.date;
     }
-    if (typeof raw.time === 'string' && TIME_RE.test(raw.time)) {
-        out.time = raw.time;
+    if (typeof rawObj.time === 'string' && TIME_RE.test(rawObj.time)) {
+        out.time = rawObj.time;
     }
-    if (typeof raw.intent === 'string' && VALID_INTENTS.has(raw.intent)) {
-        out.intent = raw.intent;
+    if (typeof rawObj.intent === 'string' && VALID_INTENTS.has(rawObj.intent)) {
+        out.intent = rawObj.intent;
     }
-    if (typeof raw.question === 'string' && raw.question.trim()) {
-        out.question = raw.question.trim().slice(0, 500);
+    if (typeof rawObj.question === 'string' && rawObj.question.trim()) {
+        out.question = rawObj.question.trim().slice(0, 500);
     }
-    if (typeof raw.language === 'string' && VALID_LANGUAGES.has(raw.language)) {
-        out.language = raw.language;
+    if (typeof rawObj.language === 'string' && VALID_LANGUAGES.has(rawObj.language)) {
+        out.language = rawObj.language;
     }
     return out;
 }
-
 async function extractSlots(message, currentDate, currentTime) {
     const dayName = new Date(currentDate).toLocaleDateString('en-US', { weekday: 'long' });
     if (!config_1.config.geminiApiKey) {

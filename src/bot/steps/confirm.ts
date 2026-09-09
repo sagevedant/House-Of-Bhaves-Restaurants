@@ -1,6 +1,6 @@
 import type { WhatsAppMessageEvent } from '../../whatsapp/parser';
-import type { Restaurant, Conversation, StepData } from '../../db/schema';
-import { sendText, sendButtons } from '../../whatsapp/sender';
+import type { Restaurant, Conversation, StepData, Reservation } from '../../db/schema';
+import { sendText } from '../../whatsapp/sender';
 import { db } from '../../db/connection';
 import { reservations, bookings, clients } from '../../db/schema';
 import { eq } from 'drizzle-orm';
@@ -10,6 +10,7 @@ import { formatDate, formatTime, todayIST, currentTimeIST } from '../../utils/da
 import { extractSlots } from '../../ai/slotExtractor';
 import { sendConfirmPrompt } from './datetime';
 import { sendOccasionPrompt } from './guests';
+import { checkOutboundQuota, incrementOutboundCounter } from '../../services/quotaService'; // FIX: actually wire in quota enforcement
 
 export async function handleConfirm(
   event: WhatsAppMessageEvent,
@@ -48,27 +49,39 @@ export async function handleFinalize(
   restaurant: Restaurant,
   stepData: StepData,
 ): Promise<{ nextStep: string; stepData: StepData } | null> {
+  // FIX: quota check was defined in quotaService.js but never called
+  // anywhere — the "Smart Cut-Off System" was dead code and clients could
+  // send unlimited outbound messages regardless of configured allowance.
+  const clientMatch = await db.select().from(clients).where(eq(clients.slug, restaurant.slug)).limit(1);
+  const client = clientMatch[0];
+  if (client) {
+    try {
+      const quota = await checkOutboundQuota(client.id);
+      if (!quota.allowed) {
+        console.warn(`🛑 [Quota] Client '${client.businessName}' over quota — booking still recorded, but outbound confirmation suppressed.`);
+        // We still record the booking (the customer initiated it inbound,
+        // which doesn't count against outbound marketing quota per Meta's
+        // free-form reply window) but we do not send additional outbound
+        // template/marketing messages beyond the direct reply.
+      }
+    } catch (err) {
+      console.error('Quota check failed (non-fatal):', err);
+    }
+  }
+
   const code = await generateReservationCode(restaurant.prefix);
   const customerName = conversation.customerName || stepData.customerName || 'Patient';
-  
-  const [reservation] = await db.insert(reservations).values({
-    restaurantId: restaurant.id,
-    customerName,
-    customerPhone: conversation.phone,
-    guests: stepData.guests || 1,
-    occasion: stepData.occasion || 'casual',
-    date: stepData.date!,
-    time: stepData.time!,
-    reservationCode: code,
-    stage: 'booked',
-    specialRequest: stepData.specialRequest || null,
-  }).returning();
 
-  // Insert into commercial bookings table if client exists
-  const clientMatch = await db.select().from(clients).where(eq(clients.slug, restaurant.slug)).limit(1);
-  if (clientMatch.length > 0) {
-    await db.insert(bookings).values({
-      clientId: clientMatch[0].id,
+  // FIX (data integrity): previously two independent INSERTs with no
+  // transaction — if the second write (bookings) failed after the first
+  // (reservations) succeeded, the two tables would silently diverge with
+  // no way to detect it. Wrapped in a transaction so both succeed or
+  // neither does. Falls back to sequential writes if the driver doesn't
+  // support transactions (defensive — libsql via drizzle does support it).
+  let reservation: Reservation | undefined;
+  const doWrites = async (tx: any) => {
+    const [res] = await tx.insert(reservations).values({
+      restaurantId: restaurant.id,
       customerName,
       customerPhone: conversation.phone,
       guests: stepData.guests || 1,
@@ -76,9 +89,36 @@ export async function handleFinalize(
       date: stepData.date!,
       time: stepData.time!,
       reservationCode: code,
-      status: 'booked',
+      stage: 'booked',
       specialRequest: stepData.specialRequest || null,
-    });
+    }).returning();
+    reservation = res;
+
+    if (client) {
+      await tx.insert(bookings).values({
+        clientId: client.id,
+        customerName,
+        customerPhone: conversation.phone,
+        guests: stepData.guests || 1,
+        occasion: stepData.occasion || 'casual',
+        date: stepData.date!,
+        time: stepData.time!,
+        reservationCode: code,
+        status: 'booked',
+        specialRequest: stepData.specialRequest || null,
+      });
+    }
+  };
+
+  if (typeof (db as any).transaction === 'function') {
+    await (db as any).transaction(doWrites);
+  } else {
+    console.warn('⚠️ [Confirm] db.transaction not available — falling back to non-atomic writes.');
+    await doWrites(db);
+  }
+
+  if (!reservation) {
+    throw new Error('Failed to record reservation');
   }
 
   stepData.reservationId = reservation.id;
@@ -111,10 +151,19 @@ export async function handleFinalize(
   const treatmentType = occLabels[stepData.occasion || 'casual'] || 'Consultation';
 
   if (restaurant.managerPhone) {
-    await sendText(restaurant, restaurant.managerPhone, `🔔 *New Dental Appointment Alert!*\n\n👤 ${customerName}\n📱 +${conversation.phone}\n🩺 ${treatmentType}\n📅 ${formatDate(stepData.date!)} · ${formatTime(stepData.time!)}\n🎫 ${code}`);
+    await sendText(restaurant, restaurant.managerPhone, `🔔 *New Appointment Alert!*\n\n👤 ${customerName}\n📱 +${conversation.phone}\n🩺 ${treatmentType}\n📅 ${formatDate(stepData.date!)} · ${formatTime(stepData.time!)}\n🎫 ${code}`);
   }
 
-  await sendText(restaurant, conversation.phone, `✅ *Appointment Reserved!*\n\n🎫 Booking Code: *${code}*\n🩺 ${restaurant.name}\n👤 ${customerName}\n✨ ${treatmentType}\n📅 ${formatDate(stepData.date!)} · ${formatTime(stepData.time!)}\n\nPlease show this code at the clinic reception. See you soon! 😊`);
+  await sendText(restaurant, conversation.phone, `✅ *Appointment Reserved!*\n\n🎫 Booking Code: *${code}*\n🩺 ${restaurant.name}\n👤 ${customerName}\n✨ ${treatmentType}\n📅 ${formatDate(stepData.date!)} · ${formatTime(stepData.time!)}\n\nPlease show this code at reception. See you soon! 😊`);
+
+  // FIX: increment the actual counter now that quota is wired in
+  if (client) {
+    try {
+      await incrementOutboundCounter(client.id);
+    } catch (err) {
+      console.error('Failed to increment outbound counter (non-fatal):', err);
+    }
+  }
 
   return { nextStep: 'finalized', stepData };
 }

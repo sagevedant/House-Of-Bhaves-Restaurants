@@ -29,6 +29,67 @@ export function fallbackExtract(message: string, currentDate: string): Extracted
   return slots;
 }
 
+// FIX: previously `JSON.parse(jsonStr)` was cast directly to ExtractedSlots
+// with zero runtime validation. A hallucinated enum value, malformed date,
+// or garbage number from the LLM would flow straight into DB writes and
+// customer-facing message templates unvalidated. This validates each field
+// against its expected shape and drops anything that doesn't match,
+// falling back to the regex extractor on outright parse failure.
+const VALID_OCCASIONS = new Set<string>(['casual', 'birthday', 'anniversary', 'corporate', 'party']);
+const VALID_INTENTS = new Set<string>(['book', 'modify', 'cancel', 'question', 'greeting']);
+const VALID_LANGUAGES = new Set<string>(['en', 'hi', 'hinglish']);
+const DATE_RE = /^(\d{4}-\d{2}-\d{2}|<tomorrow>)$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function isValidCalendarDate(dateStr: string): boolean {
+  if (dateStr === '<tomorrow>') return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (m < 1 || m > 12) return false;
+  const daysInMonth = new Date(y, m, 0).getDate();
+  return d >= 1 && d <= daysInMonth;
+}
+
+function sanitizeExtractedSlots(raw: unknown): ExtractedSlots {
+  if (!raw || typeof raw !== 'object') return {};
+  const rawObj = raw as Record<string, unknown>;
+  const out: ExtractedSlots = {};
+
+  if (typeof rawObj.name === 'string' && rawObj.name.trim() && rawObj.name.length <= 100) {
+    out.name = rawObj.name.trim().slice(0, 100);
+  }
+
+  if (typeof rawObj.guests === 'number' && Number.isFinite(rawObj.guests) && rawObj.guests >= 1 && rawObj.guests <= 100) {
+    out.guests = Math.round(rawObj.guests);
+  }
+
+  if (typeof rawObj.occasion === 'string' && VALID_OCCASIONS.has(rawObj.occasion)) {
+    out.occasion = rawObj.occasion as ExtractedSlots['occasion'];
+  }
+
+  if (typeof rawObj.date === 'string' && DATE_RE.test(rawObj.date) && isValidCalendarDate(rawObj.date)) {
+    out.date = rawObj.date;
+  }
+
+  if (typeof rawObj.time === 'string' && TIME_RE.test(rawObj.time)) {
+    out.time = rawObj.time;
+  }
+
+  if (typeof rawObj.intent === 'string' && VALID_INTENTS.has(rawObj.intent)) {
+    out.intent = rawObj.intent as ExtractedSlots['intent'];
+  }
+
+  if (typeof rawObj.question === 'string' && rawObj.question.trim()) {
+    out.question = rawObj.question.trim().slice(0, 500);
+  }
+
+  if (typeof rawObj.language === 'string' && VALID_LANGUAGES.has(rawObj.language)) {
+    out.language = rawObj.language as ExtractedSlots['language'];
+  }
+
+  return out;
+}
+
 export async function extractSlots(message: string, currentDate: string, currentTime: string): Promise<ExtractedSlots> {
   const dayName = new Date(currentDate).toLocaleDateString('en-US', { weekday: 'long' });
 
@@ -73,7 +134,20 @@ Message: ${message}`;
   try {
     const result = await model.generateContent(prompt);
     const jsonStr = result.response.text();
-    return JSON.parse(jsonStr) as ExtractedSlots;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      console.error('Gemini returned non-JSON output, falling back to regex extractor:', parseErr);
+      return fallbackExtract(message, currentDate);
+    }
+
+    const sanitized = sanitizeExtractedSlots(parsed);
+    if (Object.keys(sanitized).length === 0) {
+      console.warn('Gemini output failed validation entirely — falling back to regex extractor.');
+      return fallbackExtract(message, currentDate);
+    }
+    return sanitized;
   } catch (error) {
     console.error('Gemini extraction error:', error);
     return fallbackExtract(message, currentDate);

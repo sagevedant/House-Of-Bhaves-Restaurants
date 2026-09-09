@@ -3,7 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.requireAdminAuth = requireAdminAuth;
 const crypto_1 = require("crypto");
 const config_1 = require("../config");
-
 /**
  * FIX (critical): /agency, /onboard, /restaurant/:slug, /api/agency/*,
  * /api/restaurant/:slug/export previously had ZERO authentication. Any
@@ -22,10 +21,10 @@ function timingSafeEqual(a, b) {
     const bufB = Buffer.from(b);
     if (bufA.length !== bufB.length) {
         // still run a comparison of equal length to avoid leaking length via timing
-        crypto_1.timingSafeEqual(bufA, bufA);
+        (0, crypto_1.timingSafeEqual)(bufA, bufA);
         return false;
     }
-    return crypto_1.timingSafeEqual(bufA, bufB);
+    return (0, crypto_1.timingSafeEqual)(bufA, bufB);
 }
 function requireAdminAuth(req, res, next) {
     const { adminBasicAuthUser, adminBasicAuthPass } = config_1.config;

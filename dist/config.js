@@ -7,7 +7,6 @@ exports.config = void 0;
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
-
 // FIX (critical): previously this file shipped a live, working, read-write
 // Turso auth token + DB URL as hardcoded fallback defaults. Anyone with
 // access to the source/build had full read/write access to the production
@@ -24,9 +23,6 @@ function requireEnv(name) {
     }
     return val;
 }
-
-// ADMIN_BASIC_AUTH_USER / ADMIN_BASIC_AUTH_PASS gate the internal
-// dashboard/onboarding/export endpoints (see webhook auth middleware in index.js).
 exports.config = {
     PORT: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
     tursoDatabaseUrl: requireEnv('TURSO_DATABASE_URL'),
@@ -48,7 +44,6 @@ exports.config = {
     adminBasicAuthUser: process.env.ADMIN_BASIC_AUTH_USER || '',
     adminBasicAuthPass: process.env.ADMIN_BASIC_AUTH_PASS || '',
 };
-
 if (!exports.config.mockWhatsApp && (!exports.config.metaAccessToken || !exports.config.whatsappPhoneNumberId)) {
     console.warn('⚠️ [CONFIG WARNING] META_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID not set and ' +
         'MOCK_WHATSAPP is not "true". Per-client tokens in the DB will be required for ' +

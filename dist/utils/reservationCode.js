@@ -4,7 +4,6 @@ exports.generateReservationCode = generateReservationCode;
 const connection_1 = require("../db/connection");
 const schema_1 = require("../db/schema");
 const drizzle_orm_1 = require("drizzle-orm");
-
 /**
  * FIX: previously only checked uniqueness against the `reservations` table,
  * but `bookings.reservationCode` is a separate unique column that receives
@@ -19,8 +18,16 @@ async function generateReservationCode(prefix) {
         const digits = String(Math.floor(1000 + Math.random() * 9000));
         const code = `${prefix}-RES-${digits}`;
         const [existingRes, existingBooking] = await Promise.all([
-            connection_1.db.select({ id: schema_1.reservations.id }).from(schema_1.reservations).where((0, drizzle_orm_1.eq)(schema_1.reservations.reservationCode, code)).get(),
-            connection_1.db.select({ id: schema_1.bookings.id }).from(schema_1.bookings).where((0, drizzle_orm_1.eq)(schema_1.bookings.reservationCode, code)).get(),
+            connection_1.db
+                .select({ id: schema_1.reservations.id })
+                .from(schema_1.reservations)
+                .where((0, drizzle_orm_1.eq)(schema_1.reservations.reservationCode, code))
+                .get(),
+            connection_1.db
+                .select({ id: schema_1.bookings.id })
+                .from(schema_1.bookings)
+                .where((0, drizzle_orm_1.eq)(schema_1.bookings.reservationCode, code))
+                .get(),
         ]);
         if (!existingRes && !existingBooking)
             return code;

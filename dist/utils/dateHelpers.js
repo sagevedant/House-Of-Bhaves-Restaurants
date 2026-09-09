@@ -18,7 +18,6 @@ exports.isWithinOperatingHours = isWithinOperatingHours;
 exports.getAvailableTimeSlots = getAvailableTimeSlots;
 exports.resolveRelativeDay = resolveRelativeDay;
 exports.resolveDateInput = resolveDateInput;
-
 function nowIST() {
     const date = new Date();
     const istOffset = 5.5 * 60 * 60 * 1000;
@@ -112,7 +111,6 @@ function isWithinOperatingHours(time24, lunchHours, dinnerHours) {
     }
     return false;
 }
-
 /**
  * FIX (logic bug): slots that wrap past midnight (e.g. dinner "19:00-00:30")
  * previously stored display-corrected strings like "00:30" and then filtered
@@ -184,7 +182,6 @@ function getAvailableTimeSlots(date, lunchHours, dinnerHours) {
         result.push({ period: 'Dinner', slots: dinnerSlots.map(s => s.display) });
     return result;
 }
-
 function resolveRelativeDay(input) {
     return resolveDateInput(input);
 }
@@ -196,6 +193,7 @@ function resolveDateInput(input) {
         return tomorrowIST();
     if (['day after', 'parson', 'parso', 'day after tomorrow'].includes(i))
         return dayAfterTomorrowIST();
+    // Try parsing month names and numbers (e.g. "3rd august", "3 aug", "august 3")
     const months = {
         jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3,
         may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7,
@@ -217,6 +215,7 @@ function resolveDateInput(input) {
         const dd = String(d.getDate()).padStart(2, '0');
         return `${yyyy}-${mm}-${dd}`;
     }
+    // Try parsing weekday names (e.g. "monday", "friday", "mon", "aug 3")
     const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const targetDayIdx = weekdays.indexOf(i);
     if (targetDayIdx !== -1) {

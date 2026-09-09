@@ -1,6 +1,6 @@
 export function nowIST(): Date {
   const date = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+  const istOffset = 5.5 * 60 * 60 * 1000;
   return new Date(date.getTime() + date.getTimezoneOffset() * 60 * 1000 + istOffset);
 }
 
@@ -105,25 +105,47 @@ export function isWithinOperatingHours(time24: string, lunchHours: string, dinne
   return false;
 }
 
+/**
+ * FIX (logic bug): slots that wrap past midnight (e.g. dinner "19:00-00:30")
+ * previously stored display-corrected strings like "00:30" and then filtered
+ * "today" slots via plain string comparison (`s >= nowTime`). Lexically,
+ * "00:30" < "19:00", so a genuinely-future post-midnight slot would be
+ * incorrectly dropped (or an already-past slot incorrectly kept) depending
+ * on current time — a bug that only manifests late at night and is easy to
+ * miss in testing.
+ *
+ * Fix: track each slot's *actual minutes-since-midnight-of-the-lunch/dinner-
+ * window-start* (allowing values >= 1440 for post-midnight slots) alongside
+ * its display string, and filter using that numeric value instead of the
+ * display string.
+ */
 export function getAvailableTimeSlots(date: string, lunchHours: string, dinnerHours: string): { period: string; slots: string[] }[] {
-  const generateSlots = (startEnd: string) => {
+  interface SlotEntry {
+    display: string;
+    minutesFromWindowStart: number;
+  }
+
+  const generateSlots = (startEnd: string): SlotEntry[] => {
     if (!startEnd || !startEnd.includes('-')) return [];
     const [start, end] = startEnd.split('-');
     if (!start || !end || !start.includes(':') || !end.includes(':')) return [];
     
-    const slots = [];
+    const slots: SlotEntry[] = [];
     let [h, m] = start.split(':').map(Number);
     let [eh, em] = end.split(':').map(Number);
     if (isNaN(h) || isNaN(m) || isNaN(eh) || isNaN(em)) return [];
 
-    // Handle midnight wrap-around (e.g. 19:00 to 00:30 or 01:30 AM)
     if (eh < h || (eh === h && em < m)) {
       eh += 24;
     }
 
     while (h < eh || (h === eh && m <= em)) {
       const displayH = h >= 24 ? h - 24 : h;
-      slots.push(`${displayH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+      const display = `${displayH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+      // minutesFromWindowStart lets us compare "is this slot still in the
+      // future" using arithmetic instead of lexical string comparison.
+      const minutesFromWindowStart = h * 60 + m;
+      slots.push({ display, minutesFromWindowStart });
       m += 30;
       if (m >= 60) {
         h += 1;
@@ -138,13 +160,26 @@ export function getAvailableTimeSlots(date: string, lunchHours: string, dinnerHo
   
   if (date === todayIST()) {
     const nowTime = currentTimeIST();
-    lunchSlots = lunchSlots.filter(s => s >= nowTime);
-    dinnerSlots = dinnerSlots.filter(s => s >= nowTime);
+    const [nowH, nowM] = nowTime.split(':').map(Number);
+    const nowMinutes = nowH * 60 + nowM;
+    // A post-midnight slot (minutesFromWindowStart >= 1440) is only "past"
+    // if we've also wrapped past midnight in real time relative to the
+    // window; since both lunch and dinner windows start same-day, we
+    // compare against nowMinutes directly — values >=1440 always compare
+    // as "still ahead" today, which is correct: e.g. dinner window
+    // 19:00-00:30 with now=21:00 (1260 min) should keep the 00:30 slot
+    // (1470 min), which now correctly passes 1470 >= 1260.
+    // If "now" is itself past midnight (e.g. 00:15 the next calendar day),
+    // todayIST() would already refer to that new day and the dinner window
+    // from the *previous* day is no longer relevant, so no special-casing
+    // needed beyond straightforward minute arithmetic here.
+    lunchSlots = lunchSlots.filter(s => s.minutesFromWindowStart >= nowMinutes);
+    dinnerSlots = dinnerSlots.filter(s => s.minutesFromWindowStart >= nowMinutes);
   }
 
-  const result = [];
-  if (lunchSlots.length > 0) result.push({ period: 'Lunch', slots: lunchSlots });
-  if (dinnerSlots.length > 0) result.push({ period: 'Dinner', slots: dinnerSlots });
+  const result: { period: string; slots: string[] }[] = [];
+  if (lunchSlots.length > 0) result.push({ period: 'Lunch', slots: lunchSlots.map(s => s.display) });
+  if (dinnerSlots.length > 0) result.push({ period: 'Dinner', slots: dinnerSlots.map(s => s.display) });
   return result;
 }
 

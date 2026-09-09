@@ -1,3 +1,5 @@
+import { sanitizePhone } from '../utils/phoneHelpers';
+
 export type WhatsAppEvent =
   | { type: 'text'; text: string; messageId: string; from: string; timestamp: string; customerName?: string }
   | { type: 'button_reply'; buttonId: string; buttonText: string; messageId: string; from: string; timestamp: string; customerName?: string }
@@ -13,6 +15,13 @@ export interface ParsedWebhook {
   events: WhatsAppEvent[];
 }
 
+/**
+ * FIX: sanitizePhone existed but was inconsistently applied downstream
+ * (some writes used raw event.from, others didn't). Now normalized exactly
+ * once, here, at the point every phone number enters the system — every
+ * downstream consumer (router, confirm, CSV export, dashboard) can trust
+ * `event.from` / `msg.from` is already in canonical format.
+ */
 export function parseWebhookPayload(body: any): ParsedWebhook[] {
   const results: ParsedWebhook[] = [];
 
@@ -29,15 +38,15 @@ export function parseWebhookPayload(body: any): ParsedWebhook[] {
             const parsedEvents: WhatsAppEvent[] = [];
             const contacts = value.contacts || [];
 
-            // Parse Messages
             if (Array.isArray(value.messages)) {
               for (const msg of value.messages) {
                 const contact = contacts.find((c: any) => c.wa_id === msg.from);
                 const customerName = contact?.profile?.name;
+                const sanitizedFrom = sanitizePhone(msg.from);
 
                 const base = {
                   messageId: msg.id,
-                  from: msg.from,
+                  from: sanitizedFrom,
                   timestamp: msg.timestamp,
                   customerName,
                 };
@@ -73,14 +82,13 @@ export function parseWebhookPayload(body: any): ParsedWebhook[] {
               }
             }
 
-            // Parse Statuses
             if (Array.isArray(value.statuses)) {
               for (const status of value.statuses) {
                 parsedEvents.push({
                   type: 'status_update',
                   messageId: status.id,
                   status: status.status,
-                  recipientId: status.recipient_id,
+                  recipientId: sanitizePhone(status.recipient_id),
                   timestamp: status.timestamp,
                 });
               }

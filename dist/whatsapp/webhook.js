@@ -9,7 +9,6 @@ const connection_1 = require("../db/connection");
 const schema_1 = require("../db/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const router = (0, express_1.Router)();
-
 router.get('/', (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
@@ -23,7 +22,6 @@ router.get('/', (req, res) => {
         res.sendStatus(403);
     }
 });
-
 /**
  * FIX (critical): the POST handler previously never verified Meta's
  * X-Hub-Signature-256 header, so any third party who discovered this URL
@@ -57,7 +55,6 @@ function verifyMetaSignature(req) {
         return false;
     return (0, crypto_1.timingSafeEqual)(expectedBuf, gotBuf);
 }
-
 router.post('/', (req, res) => {
     if (!verifyMetaSignature(req)) {
         console.warn('🚫 [WEBHOOK AUTH] Rejected POST with invalid/missing signature.');
