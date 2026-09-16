@@ -1,5 +1,5 @@
 import type { WhatsAppMessageEvent } from '../../whatsapp/parser';
-import type { Restaurant, Conversation, StepData } from '../../db/schema';
+import type { Client, Conversation, StepData } from '../../db/schema';
 import { sendText, sendButtons, sendList } from '../../whatsapp/sender';
 import { extractSlots } from '../../ai/slotExtractor';
 import { todayIST, currentTimeIST } from '../../utils/dateHelpers';
@@ -7,17 +7,17 @@ import { todayIST, currentTimeIST } from '../../utils/dateHelpers';
 export async function handleGuests(
   event: WhatsAppMessageEvent,
   conversation: Conversation,
-  restaurant: Restaurant,
+  client: Client,
   stepData: StepData,
 ): Promise<{ nextStep: string; stepData: StepData } | null> {
   const phone = event.from;
   stepData.guests = 1; // Auto-default patient count to 1 for clinic
-  await sendOccasionPrompt(restaurant, phone);
+  await sendOccasionPrompt(client, phone);
   return { nextStep: 'occasion', stepData };
 }
 
-export async function sendOccasionPrompt(restaurant: Restaurant, phone: string) {
-  await sendList(restaurant, phone,
+export async function sendOccasionPrompt(client: Client, phone: string) {
+  await sendList(client, phone,
     '🩺 Select your treatment or consultation type:',
     'Select Treatment',
     [{

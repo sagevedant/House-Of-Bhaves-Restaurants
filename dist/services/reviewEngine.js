@@ -62,15 +62,9 @@ async function processPendingReviewQueue() {
             if (isWithin24hWindow) {
                 const reviewUrl = client.googleReviewUrl || 'https://maps.google.com';
                 const name = booking.customerName || 'Guest';
-                const rawTextPayload = `Hey ${name}! Thanks for dining with us at ${client.businessName} tonight. We hope you loved the experience! Could you spare 10 seconds to share your experience with our team here?\n\nGoogle Review Link: ${reviewUrl}`;
+                const rawTextPayload = `Hey ${name}! Thanks for visiting us at ${client.businessName} today. We hope you loved the experience! Could you spare 10 seconds to share your experience with our team here?\n\nGoogle Review Link: ${reviewUrl}`;
                 // Send free-form text message via 24h customer service window (Net Meta Cost = ₹0.00)
-                // Adapt client to Restaurant type structure for sender helper
-                const dummyRestaurant = {
-                    name: client.businessName,
-                    whatsappPhoneNumberId: client.whatsappPhoneNumberId,
-                    metaAccessToken: client.metaAccessToken,
-                };
-                await (0, sender_1.sendText)(dummyRestaurant, booking.customerPhone, rawTextPayload);
+                await (0, sender_1.sendText)(client, booking.customerPhone, rawTextPayload);
                 await connection_1.db
                     .update(schema_1.bookings)
                     .set({ reviewSent: true })

@@ -5,6 +5,7 @@ export declare const config: {
     absoluteDatabasePath: string;
     metaApiBase: string;
     metaAppId: string;
+    enforceWebhookSignature: boolean;
     metaAppSecret: string;
     metaEmbeddedSignupConfigId: string;
     metaSystemUserAccessToken: string;

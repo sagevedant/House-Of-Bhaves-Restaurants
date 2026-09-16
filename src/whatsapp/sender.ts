@@ -1,5 +1,5 @@
 import { config } from '../config';
-import type { Restaurant } from '../db/schema';
+import type { Client } from '../db/schema';
 
 export interface ButtonDef {
   id: string;
@@ -17,13 +17,13 @@ export interface ListSection {
   rows: ListRow[];
 }
 
-export async function callMessagesApi(restaurant: Restaurant, payload: object): Promise<void> {
-  const token = (restaurant.metaAccessToken && !restaurant.metaAccessToken.startsWith('PLACEHOLDER')) 
-    ? restaurant.metaAccessToken 
+export async function callMessagesApi(client: Client, payload: object): Promise<void> {
+  const token = (client.metaAccessToken && !client.metaAccessToken.startsWith('PLACEHOLDER')) 
+    ? client.metaAccessToken 
     : config.metaAccessToken;
 
-  const phoneId = (restaurant.whatsappPhoneNumberId && !restaurant.whatsappPhoneNumberId.startsWith('PLACEHOLDER')) 
-    ? restaurant.whatsappPhoneNumberId 
+  const phoneId = (client.whatsappPhoneNumberId && !client.whatsappPhoneNumberId.startsWith('PLACEHOLDER')) 
+    ? client.whatsappPhoneNumberId 
     : config.whatsappPhoneNumberId;
 
   const isMock = config.mockWhatsApp || !token || token.startsWith('PLACEHOLDER') || token === 'default';
@@ -32,7 +32,7 @@ export async function callMessagesApi(restaurant: Restaurant, payload: object): 
   console.log(`📡 [OUTBOUND WA CHECK]: Phone ID='${phoneId}', Token='${tokenSnippet}', mockMode=${isMock}`);
 
   if (isMock) {
-    console.log(`ℹ️ [MOCK WA MODE ACTIVE - ${restaurant.name}] Payload:`, JSON.stringify(payload, null, 2));
+    console.log(`ℹ️ [MOCK WA MODE ACTIVE - ${client.businessName}] Payload:`, JSON.stringify(payload, null, 2));
     return;
   }
 
@@ -56,11 +56,11 @@ export async function callMessagesApi(restaurant: Restaurant, payload: object): 
       console.log(`✅ [WhatsApp API Success - HTTP ${response.status}]:`, resText);
     }
   } catch (error) {
-    console.error(`❌ [WhatsApp API Request Failed - ${restaurant.name}]:`, error);
+    console.error(`❌ [WhatsApp API Request Failed - ${client.businessName}]:`, error);
   }
 }
 
-export async function sendText(restaurant: Restaurant, to: string, text: string): Promise<void> {
+export async function sendText(client: Client, to: string, text: string): Promise<void> {
   const payload = {
     messaging_product: 'whatsapp',
     recipient_type: 'individual',
@@ -68,11 +68,11 @@ export async function sendText(restaurant: Restaurant, to: string, text: string)
     type: 'text',
     text: { body: text },
   };
-  return callMessagesApi(restaurant, payload);
+  return callMessagesApi(client, payload);
 }
 
 export async function sendButtons(
-  restaurant: Restaurant,
+  client: Client,
   to: string,
   bodyText: string,
   buttons: ButtonDef[],
@@ -103,11 +103,11 @@ export async function sendButtons(
     payload.interactive.footer = { text: footer.slice(0, 60) };
   }
 
-  return callMessagesApi(restaurant, payload);
+  return callMessagesApi(client, payload);
 }
 
 export async function sendList(
-  restaurant: Restaurant,
+  client: Client,
   to: string,
   bodyText: string,
   buttonLabel: string,
@@ -144,11 +144,11 @@ export async function sendList(
     payload.interactive.footer = { text: footer.slice(0, 60) };
   }
 
-  return callMessagesApi(restaurant, payload);
+  return callMessagesApi(client, payload);
 }
 
 export async function sendTemplate(
-  restaurant: Restaurant,
+  client: Client,
   to: string,
   templateName: string,
   languageCode: string,
@@ -170,14 +170,15 @@ export async function sendTemplate(
     },
   };
 
-  return callMessagesApi(restaurant, payload);
+  return callMessagesApi(client, payload);
 }
 
-export async function markAsRead(restaurant: Restaurant, messageId: string): Promise<void> {
+export async function markAsRead(client: Client, messageId: string): Promise<void> {
   const payload = {
     messaging_product: 'whatsapp',
     status: 'read',
     message_id: messageId,
   };
-  return callMessagesApi(restaurant, payload);
+  return callMessagesApi(client, payload);
 }
+

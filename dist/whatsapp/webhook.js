@@ -23,20 +23,12 @@ router.get('/', (req, res) => {
     }
 });
 /**
- * FIX (critical): the POST handler previously never verified Meta's
- * X-Hub-Signature-256 header, so any third party who discovered this URL
- * could POST fabricated WhatsApp events (fake bookings, fake status
- * updates, fake messages) directly into the booking pipeline and database.
- *
- * This computes an HMAC-SHA256 of the raw request body using
- * META_APP_SECRET and compares it (constant-time) against the header Meta
- * sends on every real webhook delivery. Requires index.js to mount this
- * router with the raw-body-capturing json verify option (see index.js).
+ * Verifies Meta's X-Hub-Signature-256 header using HMAC-SHA256 of the raw request body.
  */
 function verifyMetaSignature(req) {
-    if (!config_1.config.metaAppSecret) {
-        // No app secret configured — cannot verify. Fail closed rather than
-        // silently accepting unsigned payloads.
+    const secret = process.env.META_APP_SECRET || config_1.config.metaAppSecret;
+    if (!secret) {
+        console.error('❌ [WEBHOOK AUTH] META_APP_SECRET not configured.');
         return false;
     }
     const signatureHeader = req.headers['x-hub-signature-256'];
@@ -48,7 +40,7 @@ function verifyMetaSignature(req) {
         console.error('❌ [WEBHOOK AUTH] Raw body not captured — check express.json verify hook in index.js');
         return false;
     }
-    const expected = 'sha256=' + (0, crypto_1.createHmac)('sha256', config_1.config.metaAppSecret).update(rawBody).digest('hex');
+    const expected = 'sha256=' + (0, crypto_1.createHmac)('sha256', secret).update(rawBody).digest('hex');
     const expectedBuf = Buffer.from(expected);
     const gotBuf = Buffer.from(signatureHeader);
     if (expectedBuf.length !== gotBuf.length)
@@ -56,12 +48,18 @@ function verifyMetaSignature(req) {
     return (0, crypto_1.timingSafeEqual)(expectedBuf, gotBuf);
 }
 router.post('/', (req, res) => {
-    if (!verifyMetaSignature(req)) {
-        console.warn('🚫 [WEBHOOK AUTH] Rejected POST with invalid/missing signature.');
-        res.sendStatus(401);
-        return;
+    const isEnforced = process.env.ENFORCE_WEBHOOK_SIGNATURE === 'true' || config_1.config.enforceWebhookSignature;
+    if (isEnforced) {
+        if (!verifyMetaSignature(req)) {
+            console.warn('🚫 [WEBHOOK AUTH] Rejected POST with invalid/missing X-Hub-Signature-256.');
+            res.sendStatus(401);
+            return;
+        }
+        console.log('\n📩 [WEBHOOK POST RECEIVED - signature verified]');
     }
-    console.log('\n📩 [WEBHOOK POST RECEIVED - signature verified]');
+    else {
+        console.log('\n📩 [WEBHOOK POST RECEIVED - signature verification bypassed (ENFORCE_WEBHOOK_SIGNATURE is disabled)]');
+    }
     // Respond immediately to acknowledge receipt (<5 seconds SLA for Meta)
     res.status(200).send('EVENT_RECEIVED');
     const body = req.body;

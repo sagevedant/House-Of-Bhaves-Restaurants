@@ -8,10 +8,10 @@ const sender_1 = require("../../whatsapp/sender");
 const slotExtractor_1 = require("../../ai/slotExtractor");
 const dateHelpers_1 = require("../../utils/dateHelpers");
 const occasion_1 = require("./occasion");
-async function handleDateTimeDate(event, conversation, restaurant, stepData) {
+async function handleDateTimeDate(event, conversation, client, stepData) {
     const phone = event.from;
     if (stepData.date) {
-        await sendTimePrompt(restaurant, phone, stepData.date);
+        await sendTimePrompt(client, phone, stepData.date);
         return { nextStep: 'datetime_time', stepData };
     }
     let date;
@@ -41,28 +41,22 @@ async function handleDateTimeDate(event, conversation, restaurant, stepData) {
         }
     }
     if (date) {
-        const day = (0, dateHelpers_1.getDayName)(date).toLowerCase();
-        if (restaurant.closedDays?.toLowerCase().includes(day)) {
-            await (0, sender_1.sendText)(restaurant, phone, `Sorry, our clinic is closed on ${(0, dateHelpers_1.getDayName)(date)}s! Please pick another day 🙏`);
-            await (0, occasion_1.sendDatePrompt)(restaurant, phone);
-            return { nextStep: 'datetime_date', stepData };
-        }
-        const slots = (0, dateHelpers_1.getAvailableTimeSlots)(date, restaurant.openingHoursLunch || '10:00-14:00', restaurant.openingHoursDinner || '17:00-21:00');
+        const slots = (0, dateHelpers_1.getAvailableTimeSlots)(date, client.openingHoursLunch || '10:00-14:00', client.openingHoursDinner || '17:00-21:00');
         if (!slots || slots.length === 0 || slots.every(s => s.slots.length === 0)) {
-            await (0, sender_1.sendText)(restaurant, phone, `All OPD slots for ${(0, dateHelpers_1.formatDate)(date)} are full or closed! How about another day? 🌟`);
-            await (0, occasion_1.sendDatePrompt)(restaurant, phone);
+            await (0, sender_1.sendText)(client, phone, `All OPD slots for ${(0, dateHelpers_1.formatDate)(date)} are full or closed! How about another day? 🌟`);
+            await (0, occasion_1.sendDatePrompt)(client, phone);
             return { nextStep: 'datetime_date', stepData };
         }
         stepData.date = date;
-        await sendTimePrompt(restaurant, phone, date);
+        await sendTimePrompt(client, phone, date);
         return { nextStep: 'datetime_time', stepData };
     }
-    await (0, occasion_1.sendDatePrompt)(restaurant, phone);
+    await (0, occasion_1.sendDatePrompt)(client, phone);
     return { nextStep: 'datetime_date', stepData };
 }
-async function sendTimePrompt(restaurant, phone, date) {
-    const lunchHours = restaurant.openingHoursLunch !== null && restaurant.openingHoursLunch !== undefined ? restaurant.openingHoursLunch : '10:00-14:00';
-    const dinnerHours = restaurant.openingHoursDinner || '17:00-21:00';
+async function sendTimePrompt(client, phone, date) {
+    const lunchHours = client.openingHoursLunch !== null && client.openingHoursLunch !== undefined ? client.openingHoursLunch : '10:00-14:00';
+    const dinnerHours = client.openingHoursDinner || '17:00-21:00';
     const slots = (0, dateHelpers_1.getAvailableTimeSlots)(date, lunchHours, dinnerHours);
     const sections = slots.filter(s => s.slots.length > 0).map(s => ({
         title: s.period === 'Lunch' ? '🌞 Morning OPD (10 AM - 2 PM)' : '🌙 Evening OPD (5 PM - 9 PM)',
@@ -72,16 +66,16 @@ async function sendTimePrompt(restaurant, phone, date) {
         }))
     }));
     if (sections.length > 0) {
-        await (0, sender_1.sendList)(restaurant, phone, '🕐 Select your preferred OPD time slot:', 'Select Time', sections);
+        await (0, sender_1.sendList)(client, phone, '🕐 Select your preferred OPD time slot:', 'Select Time', sections);
     }
     else {
-        await (0, sender_1.sendText)(restaurant, phone, `No available OPD slots for ${(0, dateHelpers_1.formatDate)(date)}. Please select another day!`);
+        await (0, sender_1.sendText)(client, phone, `No available OPD slots for ${(0, dateHelpers_1.formatDate)(date)}. Please select another day!`);
     }
 }
-async function handleDateTimeTime(event, conversation, restaurant, stepData) {
+async function handleDateTimeTime(event, conversation, client, stepData) {
     const phone = event.from;
     if (stepData.time) {
-        await sendConfirmPrompt(restaurant, phone, stepData, conversation);
+        await sendConfirmPrompt(client, phone, stepData, conversation);
         return { nextStep: 'confirm', stepData };
     }
     let time;
@@ -94,15 +88,15 @@ async function handleDateTimeTime(event, conversation, restaurant, stepData) {
     }
     if (time) {
         stepData.time = time;
-        await sendConfirmPrompt(restaurant, phone, stepData, conversation);
+        await sendConfirmPrompt(client, phone, stepData, conversation);
         return { nextStep: 'confirm', stepData };
     }
     if (stepData.date) {
-        await sendTimePrompt(restaurant, phone, stepData.date);
+        await sendTimePrompt(client, phone, stepData.date);
     }
     return { nextStep: 'datetime_time', stepData };
 }
-async function sendConfirmPrompt(restaurant, phone, stepData, conversation) {
+async function sendConfirmPrompt(client, phone, stepData, conversation) {
     const occLabels = {
         casual: 'Consultation & Checkup 🩺',
         birthday: 'Teeth Whitening ✨',
@@ -111,8 +105,8 @@ async function sendConfirmPrompt(restaurant, phone, stepData, conversation) {
         party: 'Root Canal & Implants 💉'
     };
     const treatmentLabel = occLabels[stepData.occasion || 'casual'] || 'Consultation & Checkup 🩺';
-    const text = `📋 *Your Appointment Summary:*\n\n🩺 ${restaurant.name}\n👤 ${conversation.customerName || stepData.customerName || 'Patient'}\n✨ ${treatmentLabel}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)}\n🕐 ${(0, dateHelpers_1.formatTime)(stepData.time)}\n\nDoes everything look good?`;
-    await (0, sender_1.sendButtons)(restaurant, phone, text, [
+    const text = `📋 *Your Appointment Summary:*\n\n🩺 ${client.businessName}\n👤 ${conversation.customerName || stepData.customerName || 'Patient'}\n✨ ${treatmentLabel}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)}\n🕐 ${(0, dateHelpers_1.formatTime)(stepData.time)}\n\nDoes everything look good?`;
+    await (0, sender_1.sendButtons)(client, phone, text, [
         { id: 'confirm_yes', title: 'Confirm ✅' },
         { id: 'confirm_change', title: 'Change ↩️' },
     ]);

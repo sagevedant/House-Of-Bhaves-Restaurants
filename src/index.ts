@@ -3,7 +3,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { config } from './config';
 import { db, initializeDatabase } from './db/connection';
-import { restaurants, reservations, conversations, clients, customers, bookings, users } from './db/schema';
+import { conversations, clients, customers, bookings, users } from './db/schema';
 import webhookRouter from './whatsapp/webhook';
 import { sendToMakeWebhook } from './services/makeIntegration';
 import { eq, desc, and } from 'drizzle-orm';
@@ -304,10 +304,6 @@ app.post('/login', loginLimiter, async (req, res) => {
       if (client?.slug) {
         return res.redirect(`/restaurant/${encodeURIComponent(client.slug)}`);
       }
-      const rest = await db.select().from(restaurants).where(eq(restaurants.id, user.clientId)).get();
-      if (rest?.slug) {
-        return res.redirect(`/restaurant/${encodeURIComponent(rest.slug)}`);
-      }
     }
 
     res.redirect('/agency');
@@ -339,15 +335,12 @@ app.get('/deletion', (req, res) => {
 // FIX (critical): this route previously dumped full customer PII (names,
 // phone numbers) as CSV to anyone who guessed the slug, with no auth and
 // no CSV-injection escaping. Now requires tenant-scoped auth + escapes every field.
-app.get('/api/restaurant/:slug/export', requireTenantAccess('slug'), async (req, res) => {
+app.get(['/api/restaurant/:slug/export', '/api/client/:slug/export'], requireTenantAccess('slug'), async (req, res) => {
   try {
     const rawSlug = req.params.slug;
     const slug = Array.isArray(rawSlug) ? rawSlug[0] : (rawSlug || '');
     const clientMatches = await db.select().from(clients).where(eq(clients.slug, slug)).limit(1);
-    const restMatches = await db.select().from(restaurants).where(eq(restaurants.slug, slug)).limit(1);
-
     const client = clientMatches[0];
-    const restaurant = restMatches[0];
 
     interface ExportRes {
       code: string;
@@ -374,21 +367,6 @@ app.get('/api/restaurant/:slug/export', requireTenantAccess('slug'), async (req,
         time: b.time || '',
         status: b.status || 'booked',
         createdAt: b.createdAt || ''
-      }));
-    }
-
-    if (allRes.length === 0 && restaurant) {
-      const restReservations = await db.select().from(reservations).where(eq(reservations.restaurantId, restaurant.id)).orderBy(desc(reservations.createdAt));
-      allRes = restReservations.map(r => ({
-        code: r.reservationCode || '',
-        name: r.customerName || 'Guest',
-        phone: r.customerPhone || '',
-        guests: r.guests || 2,
-        occasion: r.occasion || 'casual',
-        date: r.date || '',
-        time: r.time || '',
-        status: r.stage || 'booked',
-        createdAt: r.createdAt || ''
       }));
     }
 
@@ -423,40 +401,41 @@ app.post('/api/reservations/demo', requireAuth, async (req, res) => {
   try {
     const code = await generateReservationCode('DEMO');
     
-    const allRestaurants = await db.select().from(restaurants).limit(1);
-    const restaurantId = allRestaurants.length > 0 ? allRestaurants[0].id : 1;
-    const restaurantName = allRestaurants.length > 0 ? allRestaurants[0].name : 'House of Bhaves Rooftop & Lounge (HOB)';
+    const allClients = await db.select().from(clients).limit(1);
+    const clientId = allClients.length > 0 ? allClients[0].id : 1;
+    const clientName = allClients.length > 0 ? allClients[0].businessName : 'Smize Dental Clinic';
 
-    // FIX: removed hardcoded real-looking customer name/phone (PII) that was
-    // previously baked into source. Demo data is now clearly synthetic.
-    const [newRes] = await db.insert(reservations).values({
-      restaurantId,
+    const [newBooking] = await db.insert(bookings).values({
+      clientId,
       customerName: 'Demo Guest',
       customerPhone: '910000000000',
-      guests: 4,
-      occasion: 'birthday',
+      guests: 1,
+      occasion: 'casual',
       date: new Date().toISOString().split('T')[0],
       time: '20:30',
       reservationCode: code,
-      stage: 'booked',
+      status: 'booked',
     }).returning();
     
     await sendToMakeWebhook({
       event: 'demo_created',
-      reservationId: newRes.id,
-      reservationCode: newRes.reservationCode,
-      restaurantName,
-      customerName: newRes.customerName,
-      customerPhone: newRes.customerPhone,
-      guests: newRes.guests,
-      occasion: newRes.occasion,
-      date: newRes.date,
-      time: newRes.time,
-      stage: newRes.stage,
+      bookingId: newBooking.id,
+      reservationId: newBooking.id,
+      reservationCode: newBooking.reservationCode,
+      restaurantName: clientName,
+      businessName: clientName,
+      customerName: newBooking.customerName,
+      customerPhone: newBooking.customerPhone,
+      guests: newBooking.guests,
+      occasion: newBooking.occasion,
+      date: newBooking.date,
+      time: newBooking.time,
+      stage: newBooking.status,
+      status: newBooking.status,
       timestamp: new Date().toISOString(),
     });
     
-    res.json(newRes);
+    res.json(newBooking);
   } catch (error) {
     console.error('Demo creation error:', error);
     res.status(500).json({ error: 'Failed to create demo reservation' });
@@ -479,19 +458,13 @@ app.post('/api/reservations/status', requireAuth, async (req, res) => {
       .where(eq(bookings.id, reservationId))
       .returning();
 
-    // Update in legacy reservations table
-    const [updatedRes] = await db.update(reservations)
-      .set({ stage: status })
-      .where(eq(reservations.id, reservationId))
-      .returning();
-
-    const updated = updatedBooking || updatedRes;
+    const updated = updatedBooking;
       
     if (updated) {
       const currentYear = new Date().getFullYear();
       const today = new Date().toISOString().split('T')[0];
-      const phone = (updated as any).customerPhone || (updated as any).phone;
-      const restId = (updated as any).clientId || (updated as any).restaurantId;
+      const phone = updated.customerPhone;
+      const clientId = updated.clientId;
 
       if (status === 'seated' || status === 'completed') {
         const updates: any = { lastDinedAt: today };
@@ -499,14 +472,14 @@ app.post('/api/reservations/status', requireAuth, async (req, res) => {
           updates.birthdayDiscountClaimedYear = currentYear;
         }
 
-        if (phone && restId) {
+        if (phone && clientId) {
           await db
             .update(conversations)
             .set(updates)
             .where(
               and(
                 eq(conversations.phone, phone),
-                eq(conversations.restaurantId, restId)
+                eq(conversations.clientId, clientId)
               )
             );
         }
@@ -1158,51 +1131,6 @@ app.post('/api/agency/embedded-signup/exchange', requireRole(['agency_admin']), 
       });
     }
 
-    // Upsert into restaurants table for backward compatibility
-    const existingRest = await db.select().from(restaurants).where(eq(restaurants.slug, cleanSlug)).limit(1);
-    if (existingRest.length > 0) {
-      await db.update(restaurants).set({
-        name: businessName,
-        address: address || '',
-        wabaId: resolvedWabaId,
-        whatsappPhoneNumberId: resolvedPhoneId || existingRest[0].whatsappPhoneNumberId,
-        metaAccessToken: resolvedToken || existingRest[0].metaAccessToken,
-        metaBusinessId,
-        embeddedSignupCompletedAt: embeddedSignupCompletedAt || existingRest[0].embeddedSignupCompletedAt,
-        tokenExpiresAt: tokenExpiresAt || existingRest[0].tokenExpiresAt,
-        onboardingStatus,
-        prefix,
-        managerPhone: managerPhone || '',
-        openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '',
-        openingHoursDinner: openingHoursDinner || '19:00-00:30',
-        googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
-        customWelcomeText: customWelcomeText || null,
-        customMenuText: customMenuText || null,
-        active: readyToActivate
-      }).where(eq(restaurants.id, existingRest[0].id));
-    } else {
-      await db.insert(restaurants).values({
-        name: businessName,
-        slug: cleanSlug,
-        address: address || '',
-        wabaId: resolvedWabaId,
-        whatsappPhoneNumberId: resolvedPhoneId || 'PENDING_SETUP',
-        metaAccessToken: resolvedToken || 'PENDING_SETUP',
-        metaBusinessId,
-        embeddedSignupCompletedAt,
-        tokenExpiresAt,
-        onboardingStatus,
-        prefix,
-        managerPhone: managerPhone || '',
-        openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '',
-        openingHoursDinner: openingHoursDinner || '19:00-00:30',
-        googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
-        customWelcomeText: customWelcomeText || null,
-        customMenuText: customMenuText || null,
-        active: readyToActivate
-      });
-    }
-
     console.log(`✅ [Provisioning Success]: Client '${cleanSlug}' onboarded (status=${onboardingStatus}, active=${readyToActivate})`);
 
     return res.json({
@@ -1544,73 +1472,47 @@ app.get('/agency', requireRole(['agency_admin']), async (req, res) => {
 });
 
 // Multi-tenant slug route & fallback (Checks both clients & restaurants tables safely)
+// Multi-tenant slug route & ledger (Standardized on clients & bookings tables)
 // FIX (critical): full reservation logbook (customer names + phone numbers)
 // for any tenant was reachable by anyone who guessed a slug — a slugified
 // business name is trivially guessable. Now auth-gated to tenant owner or agency admin.
-app.get('/restaurant/:slug?', requireTenantAccess('slug'), async (req, res) => {
+app.get(['/restaurant/:slug?', '/client/:slug?'], requireTenantAccess('slug'), async (req, res) => {
   try {
     const targetSlug = (req.params as any).slug || '';
     if (!targetSlug) {
-      return res.status(400).send('Restaurant slug required.');
+      return res.status(400).send('Client slug required.');
     }
     
-    // Check clients table first
-    let clientMatches = await db.select().from(clients).where(eq(clients.slug, targetSlug)).limit(1);
-    let restaurantMatches = await db.select().from(restaurants).where(eq(restaurants.slug, targetSlug)).limit(1);
-
+    // Check clients table
+    const clientMatches = await db.select().from(clients).where(eq(clients.slug, targetSlug)).limit(1);
     const client = clientMatches[0];
-    const restaurant = restaurantMatches[0];
 
-    if (!client && !restaurant) {
-      return res.status(404).send('Restaurant not found.');
+    if (!client) {
+      return res.status(404).send('Client not found.');
     }
 
-    const displayName = client?.businessName || restaurant?.name || targetSlug;
-    const displaySlug = client?.slug || restaurant?.slug || targetSlug;
-    const clientId = client?.id;
-    const restaurantId = restaurant?.id;
+    const displayName = client.businessName || targetSlug;
+    const displaySlug = client.slug || targetSlug;
+    const clientId = client.id;
 
-    // Query bookings / reservations cleanly
-    let allRes: any[] = [];
-    if (clientId) {
-      const clientBookings = await db
-        .select()
-        .from(bookings)
-        .where(eq(bookings.clientId, clientId))
-        .orderBy(desc(bookings.createdAt));
-      
-      allRes = clientBookings.map(b => ({
-        id: b.id,
-        customerName: b.customerName || 'Guest',
-        customerPhone: b.customerPhone,
-        guests: b.guests,
-        occasion: b.occasion,
-        date: b.date,
-        time: b.time,
-        reservationCode: b.reservationCode || 'BBC-RES-1001',
-        stage: b.status || 'booked',
-      }));
-    }
-
-    if (allRes.length === 0 && restaurantId) {
-      const restReservations = await db
-        .select()
-        .from(reservations)
-        .where(eq(reservations.restaurantId, restaurantId))
-        .orderBy(desc(reservations.createdAt));
-
-      allRes = restReservations.map(r => ({
-        id: r.id,
-        customerName: r.customerName || 'Guest',
-        customerPhone: r.customerPhone,
-        guests: r.guests,
-        occasion: r.occasion,
-        date: r.date,
-        time: r.time,
-        reservationCode: r.reservationCode || 'RES-1001',
-        stage: r.stage || 'booked',
-      }));
-    }
+    // Query bookings cleanly
+    const clientBookings = await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.clientId, clientId))
+      .orderBy(desc(bookings.createdAt));
+    
+    const allRes = clientBookings.map(b => ({
+      id: b.id,
+      customerName: b.customerName || 'Guest',
+      customerPhone: b.customerPhone,
+      guests: b.guests,
+      occasion: b.occasion,
+      date: b.date,
+      time: b.time,
+      reservationCode: b.reservationCode || 'RES-1001',
+      stage: b.status || 'booked',
+    }));
     
     const totalReservations = allRes.filter(r => r.stage !== 'cancelled').length;
     const seatedCount = allRes.filter(r => r.stage === 'seated').length;

@@ -6,10 +6,10 @@ const sender_1 = require("../../whatsapp/sender");
 const slotExtractor_1 = require("../../ai/slotExtractor");
 const dateHelpers_1 = require("../../utils/dateHelpers");
 const guests_1 = require("./guests");
-async function handleOccasion(event, conversation, restaurant, stepData) {
+async function handleOccasion(event, conversation, client, stepData) {
     const phone = event.from;
     if (stepData.occasion) {
-        await sendDatePrompt(restaurant, phone);
+        await sendDatePrompt(client, phone);
         return { nextStep: 'datetime_date', stepData };
     }
     let occasion;
@@ -25,19 +25,19 @@ async function handleOccasion(event, conversation, restaurant, stepData) {
     }
     if (occasion) {
         stepData.occasion = occasion;
-        await sendDatePrompt(restaurant, phone);
+        await sendDatePrompt(client, phone);
         return { nextStep: 'datetime_date', stepData };
     }
-    await (0, guests_1.sendOccasionPrompt)(restaurant, phone);
+    await (0, guests_1.sendOccasionPrompt)(client, phone);
     return { nextStep: 'occasion', stepData };
 }
-async function sendDatePrompt(restaurant, phone) {
+async function sendDatePrompt(client, phone) {
     const next7Days = (0, dateHelpers_1.getNextNDaysIST)(7);
     const rows = next7Days.map(d => ({
         id: `date_${d.dateStr}`,
         title: d.label.slice(0, 24),
         description: `Reserve for ${d.label}`
     }));
-    await (0, sender_1.sendList)(restaurant, phone, '📅 Select your dining date (up to 7 days in advance, or type any date e.g. "3rd August"):', 'Select Date', [{ title: '📅 Next 7 Available Days', rows }], '📅 Select Date');
+    await (0, sender_1.sendList)(client, phone, '📅 Select your dining date (up to 7 days in advance, or type any date e.g. "3rd August"):', 'Select Date', [{ title: '📅 Next 7 Available Days', rows }], '📅 Select Date');
 }
 //# sourceMappingURL=occasion.js.map

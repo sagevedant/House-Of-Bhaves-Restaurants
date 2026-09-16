@@ -22,8 +22,8 @@ export declare const requireAdminAuth: typeof requireAuth;
 export declare function requireRole(allowedRoles: ('agency_admin' | 'client_owner')[]): (req: Request, res: Response, next: NextFunction) => void;
 /**
  * Multi-Tenant Access Control Middleware
- * - agency_admin can access any restaurant/tenant.
- * - client_owner can ONLY access the restaurant/tenant associated with their clientId.
+ * - agency_admin can access any tenant.
+ * - client_owner can ONLY access the tenant associated with their clientId.
  */
 export declare function requireTenantAccess(slugParam?: string): (req: Request, res: Response, next: NextFunction) => Promise<void>;
 export { AUTH_COOKIE_NAME };

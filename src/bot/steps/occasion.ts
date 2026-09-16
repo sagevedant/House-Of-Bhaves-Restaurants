@@ -1,5 +1,5 @@
 import type { WhatsAppMessageEvent } from '../../whatsapp/parser';
-import type { Restaurant, Conversation, StepData } from '../../db/schema';
+import type { Client, Conversation, StepData } from '../../db/schema';
 import { sendButtons, sendList } from '../../whatsapp/sender';
 import { extractSlots } from '../../ai/slotExtractor';
 import { todayIST, currentTimeIST, getNextNDaysIST } from '../../utils/dateHelpers';
@@ -8,13 +8,13 @@ import { sendOccasionPrompt } from './guests';
 export async function handleOccasion(
   event: WhatsAppMessageEvent,
   conversation: Conversation,
-  restaurant: Restaurant,
+  client: Client,
   stepData: StepData,
 ): Promise<{ nextStep: string; stepData: StepData } | null> {
   const phone = event.from;
 
   if (stepData.occasion) {
-    await sendDatePrompt(restaurant, phone);
+    await sendDatePrompt(client, phone);
     return { nextStep: 'datetime_date', stepData };
   }
 
@@ -32,15 +32,15 @@ export async function handleOccasion(
 
   if (occasion) {
     stepData.occasion = occasion;
-    await sendDatePrompt(restaurant, phone);
+    await sendDatePrompt(client, phone);
     return { nextStep: 'datetime_date', stepData };
   }
 
-  await sendOccasionPrompt(restaurant, phone);
+  await sendOccasionPrompt(client, phone);
   return { nextStep: 'occasion', stepData };
 }
 
-export async function sendDatePrompt(restaurant: Restaurant, phone: string) {
+export async function sendDatePrompt(client: Client, phone: string) {
   const next7Days = getNextNDaysIST(7);
   const rows = next7Days.map(d => ({
     id: `date_${d.dateStr}`,
@@ -49,7 +49,7 @@ export async function sendDatePrompt(restaurant: Restaurant, phone: string) {
   }));
 
   await sendList(
-    restaurant,
+    client,
     phone,
     '📅 Select your dining date (up to 7 days in advance, or type any date e.g. "3rd August"):',
     'Select Date',

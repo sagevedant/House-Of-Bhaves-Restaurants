@@ -1,15 +1,13 @@
 import 'dotenv/config';
 import { db, initializeDatabase } from './connection';
-import { restaurants, reservations, clients, customers, bookings } from './schema';
+import { clients, customers, bookings, users } from './schema';
 import { eq } from 'drizzle-orm';
 import { config } from '../config';
+import { hashPassword } from '../middleware/auth';
 
 export async function seedDatabase() {
   try {
     const today = new Date();
-    const nextResetObj = new Date();
-    nextResetObj.setDate(today.getDate() + 30);
-    const nextResetDate = nextResetObj.toISOString().split('T')[0];
     const todayYmd = today.toISOString().split('T')[0];
 
     // ----------------------------------------------------
@@ -19,15 +17,11 @@ export async function seedDatabase() {
     
     const smizeTreatments = `🦷 *Smize Dental Clinic — Treatments & Services* ✨\n\n✨ *Smile Design & Aligners*\n• Clear Aligners & Invisible Braces 🦷\n• Laser Teeth Whitening & Polishing ✨\n• Dental Veneers & Cosmetic Makeovers 😁\n\n🩺 *General & Advanced Treatments*\n• Painless Root Canal Treatment (RCT) 💉\n• Dental Implants & Tooth Replacement 🦷\n• Scaling, Cleaning & Gum Care 🪥\n• Pediatric / Kids Dental Care 👶\n\nTap below to reserve your consultation slot! 👇`;
 
-    const existingSmizeClient = await db.select().from(clients).where(eq(clients.slug, 'smize-dental')).get();
-    if (!existingSmizeClient) {
+    let smizeClientRecord = await db.select().from(clients).where(eq(clients.slug, 'smize-dental')).get();
+    if (!smizeClientRecord) {
       const [smizeClient] = await db.insert(clients).values({
         businessName: 'Smize Dental Clinic & Implant Center (Dr. Kharat)',
         slug: 'smize-dental',
-        billingCycle: 'quarterly',
-        outboundAllowanceMonthly: 1000,
-        outboundSentThisMonth: 0,
-        nextMonthlyResetDate: nextResetDate,
         whatsappPhoneNumberId: config.whatsappPhoneNumberId || '1167895203082852',
         metaAccessToken: config.metaAccessToken || 'PLACEHOLDER_TOKEN',
         prefix: 'SMIZE',
@@ -36,8 +30,9 @@ export async function seedDatabase() {
         customMenuText: smizeTreatments,
         openingHoursLunch: '10:00-14:00', // Morning OPD
         openingHoursDinner: '17:00-21:00', // Evening OPD
-        active: true,
+        managerPhone: '919511673214',
       }).returning();
+      smizeClientRecord = smizeClient;
 
       // Seed Initial Demo Appointment
       const [smizeCust] = await db.insert(customers).values({
@@ -67,42 +62,9 @@ export async function seedDatabase() {
       console.log('✅ Seed: Inserted Client: Smize Dental Clinic & Implant Center (Dr. Kharat).');
     }
 
-    // Ensure Smize Dental exists in restaurants table (for single router lookup)
-    const existingSmizeRest = await db.select().from(restaurants).where(eq(restaurants.slug, 'smize-dental')).get();
-    if (!existingSmizeRest) {
-      await db.insert(restaurants).values({
-        name: 'Smize Dental Clinic & Implant Center (Dr. Kharat)',
-        slug: 'smize-dental',
-        address: 'Pune, Maharashtra',
-        whatsappPhoneNumberId: config.whatsappPhoneNumberId || '1167895203082852',
-        metaAccessToken: config.metaAccessToken || 'PLACEHOLDER_TOKEN',
-        prefix: 'SMIZE',
-        managerPhone: '919511673214',
-        openingHoursLunch: '10:00-14:00', // Morning OPD
-        openingHoursDinner: '17:00-21:00', // Evening OPD
-        closedDays: 'sunday',
-        maxPaxNormal: 12,
-        googleReviewUrl: 'https://maps.google.com/?q=Smize+Dental+Clinic',
-        customWelcomeText: smizeWelcome,
-        customMenuText: smizeTreatments,
-        active: true,
-      });
-      console.log('✅ Seed: Inserted Smize Dental Clinic into restaurants.');
-    } else {
-      await db.update(restaurants).set({
-        name: 'Smize Dental Clinic & Implant Center (Dr. Kharat)',
-        openingHoursLunch: '10:00-14:00',
-        openingHoursDinner: '17:00-21:00',
-        customWelcomeText: smizeWelcome,
-        customMenuText: smizeTreatments,
-      }).where(eq(restaurants.id, existingSmizeRest.id));
-    }
-
     // ----------------------------------------------------
     // SEED AUTH USERS (agency_admin & client_owner)
     // ----------------------------------------------------
-    const { users } = await import('./schema');
-    const { hashPassword } = await import('../middleware/auth');
 
     // 1. Seed Agency Admin User
     const adminEmail = 'admin@houseofbhaves.com';
@@ -119,7 +81,6 @@ export async function seedDatabase() {
     }
 
     // 2. Seed Smize Dental Client Owner User
-    const smizeClientRecord = await db.select().from(clients).where(eq(clients.slug, 'smize-dental')).get();
     if (smizeClientRecord) {
       const smizeEmail = 'owner@smizedental.com';
       const existingSmizeUser = await db.select().from(users).where(eq(users.email, smizeEmail)).get();

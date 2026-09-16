@@ -20,40 +20,37 @@ async function handleIncomingEvent(phoneNumberId, event) {
         return;
     }
     const msgEvent = event;
-    // Look up active client (prioritize Smize Dental Clinic for Dr. Kharat meeting demo)
-    let restaurantResult = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.slug, 'smize-dental')).limit(1);
-    if (!restaurantResult || restaurantResult.length === 0) {
-        restaurantResult = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.whatsappPhoneNumberId, phoneNumberId)).limit(1);
-    }
-    let restaurant = restaurantResult[0];
-    if (!restaurant) {
-        console.warn(`⚠️ Router: Falling back to first restaurant/clinic in database...`);
-        const all = await connection_1.db.select().from(schema_1.restaurants).limit(1);
-        restaurant = all[0];
-        if (!restaurant) {
-            console.error('❌ Router: No clients in database!');
+    // Look up client by matching WhatsApp Phone Number ID (Multi-Tenant Routing)
+    let clientResult = await connection_1.db.select().from(schema_1.clients).where((0, drizzle_orm_1.eq)(schema_1.clients.whatsappPhoneNumberId, phoneNumberId)).limit(1);
+    let client = clientResult[0];
+    if (!client) {
+        console.warn(`⚠️ Router: No client registered with Phone ID '${phoneNumberId}'. Falling back to first active client...`);
+        const all = await connection_1.db.select().from(schema_1.clients).where((0, drizzle_orm_1.eq)(schema_1.clients.active, true)).limit(1);
+        client = all[0];
+        if (!client) {
+            console.error('❌ Router: No active clients in database!');
             return;
         }
     }
-    await (0, sender_1.markAsRead)(restaurant, msgEvent.messageId);
+    await (0, sender_1.markAsRead)(client, msgEvent.messageId);
     const phone = msgEvent.from;
     if (!phone) {
         console.warn('⚠️ Router: Missing sender phone number in event');
         return;
     }
-    const convResult = await connection_1.db.select().from(schema_1.conversations).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.conversations.phone, phone), (0, drizzle_orm_1.eq)(schema_1.conversations.restaurantId, restaurant.id))).limit(1);
+    const convResult = await connection_1.db.select().from(schema_1.conversations).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.conversations.phone, phone), (0, drizzle_orm_1.eq)(schema_1.conversations.clientId, client.id))).limit(1);
     let conversation;
     if (!convResult || convResult.length === 0) {
-        console.log(`✨ Router: Creating NEW conversation for phone '${phone}' at client '${restaurant.name}'`);
+        console.log(`✨ Router: Creating NEW conversation for phone '${phone}' at client '${client.businessName}'`);
         const [newConv] = await connection_1.db.insert(schema_1.conversations).values({
             phone,
-            restaurantId: restaurant.id,
+            clientId: client.id,
             currentStep: 'entry',
             stepData: '{}',
             customerName: msgEvent.customerName || null,
         }).returning();
         conversation = newConv;
-        await (0, entry_1.handleEntry)(msgEvent, conversation, restaurant, {});
+        await (0, entry_1.handleEntry)(msgEvent, conversation, client, {});
         return;
     }
     else {
@@ -67,18 +64,18 @@ async function handleIncomingEvent(phoneNumberId, event) {
             await connection_1.db.update(schema_1.conversations).set({ interruptedStep: currentStep }).where((0, drizzle_orm_1.eq)(schema_1.conversations.id, conversation.id));
             const answer = (0, knowledge_1.findAnswer)(extracted.question);
             if (answer) {
-                await (0, sender_1.sendText)(restaurant, phone, answer);
+                await (0, sender_1.sendText)(client, phone, answer);
             }
             else {
-                await (0, sender_1.sendText)(restaurant, phone, 'Great question! For specific queries, please call us at ' + (restaurant.managerPhone || '+919511673214') + '.');
+                await (0, sender_1.sendText)(client, phone, 'Great question! For specific queries, please call us at ' + (client.managerPhone || '+919511673214') + '.');
             }
-            await (0, sender_1.sendText)(restaurant, phone, 'Now let\'s get back to your booking! 😊');
+            await (0, sender_1.sendText)(client, phone, 'Now let\'s get back to your booking! 😊');
             const syntheticEvent = { ...msgEvent, type: 'text', text: '' };
-            await routeStep(currentStep, syntheticEvent, conversation, restaurant, stepData);
+            await routeStep(currentStep, syntheticEvent, conversation, client, stepData);
             return;
         }
     }
-    let result = await routeStep(currentStep, msgEvent, conversation, restaurant, stepData);
+    let result = await routeStep(currentStep, msgEvent, conversation, client, stepData);
     if (result) {
         const { nextStep, stepData: newStepData } = result;
         await connection_1.db.update(schema_1.conversations).set({
@@ -88,7 +85,7 @@ async function handleIncomingEvent(phoneNumberId, event) {
             updatedAt: new Date().toISOString()
         }).where((0, drizzle_orm_1.eq)(schema_1.conversations.id, conversation.id));
         if (nextStep === 'finalized' && currentStep !== 'finalized') {
-            const finalResult = await (0, confirm_1.handleFinalize)(msgEvent, conversation, restaurant, newStepData);
+            const finalResult = await (0, confirm_1.handleFinalize)(msgEvent, conversation, client, newStepData);
             if (finalResult) {
                 await connection_1.db.update(schema_1.conversations).set({
                     currentStep: finalResult.nextStep,
@@ -98,33 +95,33 @@ async function handleIncomingEvent(phoneNumberId, event) {
         }
     }
     else {
-        await (0, fallback_1.handleFallback)(msgEvent, conversation, restaurant, stepData);
+        await (0, fallback_1.handleFallback)(msgEvent, conversation, client, stepData);
     }
 }
-async function routeStep(currentStep, msgEvent, conversation, restaurant, stepData) {
+async function routeStep(currentStep, msgEvent, conversation, client, stepData) {
     try {
         switch (currentStep) {
             case 'entry':
-                return await (0, entry_1.handleEntry)(msgEvent, conversation, restaurant, stepData);
+                return await (0, entry_1.handleEntry)(msgEvent, conversation, client, stepData);
             case 'guests':
-                return await (0, guests_1.handleGuests)(msgEvent, conversation, restaurant, stepData);
+                return await (0, guests_1.handleGuests)(msgEvent, conversation, client, stepData);
             case 'occasion':
-                return await (0, occasion_1.handleOccasion)(msgEvent, conversation, restaurant, stepData);
+                return await (0, occasion_1.handleOccasion)(msgEvent, conversation, client, stepData);
             case 'datetime_date':
-                return await (0, datetime_1.handleDateTimeDate)(msgEvent, conversation, restaurant, stepData);
+                return await (0, datetime_1.handleDateTimeDate)(msgEvent, conversation, client, stepData);
             case 'datetime_time':
-                return await (0, datetime_1.handleDateTimeTime)(msgEvent, conversation, restaurant, stepData);
+                return await (0, datetime_1.handleDateTimeTime)(msgEvent, conversation, client, stepData);
             case 'confirm':
-                return await (0, confirm_1.handleConfirm)(msgEvent, conversation, restaurant, stepData);
+                return await (0, confirm_1.handleConfirm)(msgEvent, conversation, client, stepData);
             case 'finalized':
-                return await (0, entry_1.handleEntry)(msgEvent, conversation, restaurant, stepData);
+                return await (0, entry_1.handleEntry)(msgEvent, conversation, client, stepData);
             default:
                 return null;
         }
     }
     catch (error) {
         console.error('Routing error:', error);
-        await (0, sender_1.sendText)(restaurant, msgEvent.from, 'Oops! Something went wrong on our end. Please try again.');
+        await (0, sender_1.sendText)(client, msgEvent.from, 'Oops! Something went wrong on our end. Please try again.');
         return null;
     }
 }

@@ -223,8 +223,8 @@ function requireRole(allowedRoles) {
 }
 /**
  * Multi-Tenant Access Control Middleware
- * - agency_admin can access any restaurant/tenant.
- * - client_owner can ONLY access the restaurant/tenant associated with their clientId.
+ * - agency_admin can access any tenant.
+ * - client_owner can ONLY access the tenant associated with their clientId.
  */
 function requireTenantAccess(slugParam = 'slug') {
     return async (req, res, next) => {
@@ -266,26 +266,18 @@ function requireTenantAccess(slugParam = 'slug') {
                         res.status(403).json({ error: 'Forbidden: You do not have access to this tenant.' });
                     }
                     else {
-                        res.status(403).send('Forbidden: You do not have permission to view this restaurant.');
+                        res.status(403).send('Forbidden: You do not have permission to view this client.');
                     }
                     return;
-                }
-            }
-            // Check legacy restaurants table
-            const rest = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.slug, targetSlug)).get();
-            if (rest) {
-                // If the legacy restaurant ID matches clientId or client slug matches
-                if (rest.id === req.user.clientId) {
-                    return next();
                 }
             }
             // If tenant not found or mismatched
             const isApi = req.path.startsWith('/api/') || req.xhr;
             if (isApi) {
-                res.status(403).json({ error: 'Forbidden: You do not have permission to view this restaurant.' });
+                res.status(403).json({ error: 'Forbidden: You do not have permission to view this client.' });
             }
             else {
-                res.status(403).send('Forbidden: You do not have permission to view this restaurant.');
+                res.status(403).send('Forbidden: You do not have permission to view this client.');
             }
         }
         catch (err) {

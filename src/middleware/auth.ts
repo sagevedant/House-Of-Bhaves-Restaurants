@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import { config } from '../config';
 import { db } from '../db/connection';
-import { clients, restaurants } from '../db/schema';
+import { clients } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import type { AuthUser } from '../types/express';
 
@@ -234,8 +234,8 @@ export function requireRole(allowedRoles: ('agency_admin' | 'client_owner')[]) {
 
 /**
  * Multi-Tenant Access Control Middleware
- * - agency_admin can access any restaurant/tenant.
- * - client_owner can ONLY access the restaurant/tenant associated with their clientId.
+ * - agency_admin can access any tenant.
+ * - client_owner can ONLY access the tenant associated with their clientId.
  */
 export function requireTenantAccess(slugParam = 'slug') {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -279,27 +279,18 @@ export function requireTenantAccess(slugParam = 'slug') {
           if (isApi) {
             res.status(403).json({ error: 'Forbidden: You do not have access to this tenant.' });
           } else {
-            res.status(403).send('Forbidden: You do not have permission to view this restaurant.');
+            res.status(403).send('Forbidden: You do not have permission to view this client.');
           }
           return;
-        }
-      }
-
-      // Check legacy restaurants table
-      const rest = await db.select().from(restaurants).where(eq(restaurants.slug, targetSlug)).get();
-      if (rest) {
-        // If the legacy restaurant ID matches clientId or client slug matches
-        if (rest.id === req.user.clientId) {
-          return next();
         }
       }
 
       // If tenant not found or mismatched
       const isApi = req.path.startsWith('/api/') || req.xhr;
       if (isApi) {
-        res.status(403).json({ error: 'Forbidden: You do not have permission to view this restaurant.' });
+        res.status(403).json({ error: 'Forbidden: You do not have permission to view this client.' });
       } else {
-        res.status(403).send('Forbidden: You do not have permission to view this restaurant.');
+        res.status(403).send('Forbidden: You do not have permission to view this client.');
       }
     } catch (err) {
       console.error('Tenant access check error:', err);

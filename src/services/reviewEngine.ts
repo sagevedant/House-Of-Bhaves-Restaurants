@@ -1,5 +1,5 @@
 import { db } from '../db/connection';
-import { bookings, customers, clients, restaurants } from '../db/schema';
+import { bookings, customers, clients } from '../db/schema';
 import { eq, and, lte } from 'drizzle-orm';
 import { sendText } from '../whatsapp/sender';
 
@@ -71,17 +71,10 @@ export async function processPendingReviewQueue(): Promise<{ processedCount: num
         const reviewUrl = client.googleReviewUrl || 'https://maps.google.com';
         const name = booking.customerName || 'Guest';
 
-        const rawTextPayload = `Hey ${name}! Thanks for dining with us at ${client.businessName} tonight. We hope you loved the experience! Could you spare 10 seconds to share your experience with our team here?\n\nGoogle Review Link: ${reviewUrl}`;
+        const rawTextPayload = `Hey ${name}! Thanks for visiting us at ${client.businessName} today. We hope you loved the experience! Could you spare 10 seconds to share your experience with our team here?\n\nGoogle Review Link: ${reviewUrl}`;
 
         // Send free-form text message via 24h customer service window (Net Meta Cost = ₹0.00)
-        // Adapt client to Restaurant type structure for sender helper
-        const dummyRestaurant: any = {
-          name: client.businessName,
-          whatsappPhoneNumberId: client.whatsappPhoneNumberId,
-          metaAccessToken: client.metaAccessToken,
-        };
-
-        await sendText(dummyRestaurant, booking.customerPhone, rawTextPayload);
+        await sendText(client, booking.customerPhone, rawTextPayload);
 
         await db
           .update(bookings)

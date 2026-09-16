@@ -308,10 +308,6 @@ app.post('/login', auth_1.loginLimiter, async (req, res) => {
             if (client?.slug) {
                 return res.redirect(`/restaurant/${encodeURIComponent(client.slug)}`);
             }
-            const rest = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, user.clientId)).get();
-            if (rest?.slug) {
-                return res.redirect(`/restaurant/${encodeURIComponent(rest.slug)}`);
-            }
         }
         res.redirect('/agency');
     }
@@ -339,14 +335,12 @@ app.get('/deletion', (req, res) => {
 // FIX (critical): this route previously dumped full customer PII (names,
 // phone numbers) as CSV to anyone who guessed the slug, with no auth and
 // no CSV-injection escaping. Now requires tenant-scoped auth + escapes every field.
-app.get('/api/restaurant/:slug/export', (0, auth_1.requireTenantAccess)('slug'), async (req, res) => {
+app.get(['/api/restaurant/:slug/export', '/api/client/:slug/export'], (0, auth_1.requireTenantAccess)('slug'), async (req, res) => {
     try {
         const rawSlug = req.params.slug;
         const slug = Array.isArray(rawSlug) ? rawSlug[0] : (rawSlug || '');
         const clientMatches = await connection_1.db.select().from(schema_1.clients).where((0, drizzle_orm_1.eq)(schema_1.clients.slug, slug)).limit(1);
-        const restMatches = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.slug, slug)).limit(1);
         const client = clientMatches[0];
-        const restaurant = restMatches[0];
         let allRes = [];
         if (client) {
             const clientBookings = await connection_1.db.select().from(schema_1.bookings).where((0, drizzle_orm_1.eq)(schema_1.bookings.clientId, client.id)).orderBy((0, drizzle_orm_1.desc)(schema_1.bookings.createdAt));
@@ -360,20 +354,6 @@ app.get('/api/restaurant/:slug/export', (0, auth_1.requireTenantAccess)('slug'),
                 time: b.time || '',
                 status: b.status || 'booked',
                 createdAt: b.createdAt || ''
-            }));
-        }
-        if (allRes.length === 0 && restaurant) {
-            const restReservations = await connection_1.db.select().from(schema_1.reservations).where((0, drizzle_orm_1.eq)(schema_1.reservations.restaurantId, restaurant.id)).orderBy((0, drizzle_orm_1.desc)(schema_1.reservations.createdAt));
-            allRes = restReservations.map(r => ({
-                code: r.reservationCode || '',
-                name: r.customerName || 'Guest',
-                phone: r.customerPhone || '',
-                guests: r.guests || 2,
-                occasion: r.occasion || 'casual',
-                date: r.date || '',
-                time: r.time || '',
-                status: r.stage || 'booked',
-                createdAt: r.createdAt || ''
             }));
         }
         let csvContent = 'Reservation Code,Customer Name,Phone Number,Guests,Occasion,Date,Time,Status,Created At\n';
@@ -405,37 +385,38 @@ app.get('/api/restaurant/:slug/export', (0, auth_1.requireTenantAccess)('slug'),
 app.post('/api/reservations/demo', auth_1.requireAuth, async (req, res) => {
     try {
         const code = await (0, reservationCode_1.generateReservationCode)('DEMO');
-        const allRestaurants = await connection_1.db.select().from(schema_1.restaurants).limit(1);
-        const restaurantId = allRestaurants.length > 0 ? allRestaurants[0].id : 1;
-        const restaurantName = allRestaurants.length > 0 ? allRestaurants[0].name : 'House of Bhaves Rooftop & Lounge (HOB)';
-        // FIX: removed hardcoded real-looking customer name/phone (PII) that was
-        // previously baked into source. Demo data is now clearly synthetic.
-        const [newRes] = await connection_1.db.insert(schema_1.reservations).values({
-            restaurantId,
+        const allClients = await connection_1.db.select().from(schema_1.clients).limit(1);
+        const clientId = allClients.length > 0 ? allClients[0].id : 1;
+        const clientName = allClients.length > 0 ? allClients[0].businessName : 'Smize Dental Clinic';
+        const [newBooking] = await connection_1.db.insert(schema_1.bookings).values({
+            clientId,
             customerName: 'Demo Guest',
             customerPhone: '910000000000',
-            guests: 4,
-            occasion: 'birthday',
+            guests: 1,
+            occasion: 'casual',
             date: new Date().toISOString().split('T')[0],
             time: '20:30',
             reservationCode: code,
-            stage: 'booked',
+            status: 'booked',
         }).returning();
         await (0, makeIntegration_1.sendToMakeWebhook)({
             event: 'demo_created',
-            reservationId: newRes.id,
-            reservationCode: newRes.reservationCode,
-            restaurantName,
-            customerName: newRes.customerName,
-            customerPhone: newRes.customerPhone,
-            guests: newRes.guests,
-            occasion: newRes.occasion,
-            date: newRes.date,
-            time: newRes.time,
-            stage: newRes.stage,
+            bookingId: newBooking.id,
+            reservationId: newBooking.id,
+            reservationCode: newBooking.reservationCode,
+            restaurantName: clientName,
+            businessName: clientName,
+            customerName: newBooking.customerName,
+            customerPhone: newBooking.customerPhone,
+            guests: newBooking.guests,
+            occasion: newBooking.occasion,
+            date: newBooking.date,
+            time: newBooking.time,
+            stage: newBooking.status,
+            status: newBooking.status,
             timestamp: new Date().toISOString(),
         });
-        res.json(newRes);
+        res.json(newBooking);
     }
     catch (error) {
         console.error('Demo creation error:', error);
@@ -455,27 +436,22 @@ app.post('/api/reservations/status', auth_1.requireAuth, async (req, res) => {
             .set({ status })
             .where((0, drizzle_orm_1.eq)(schema_1.bookings.id, reservationId))
             .returning();
-        // Update in legacy reservations table
-        const [updatedRes] = await connection_1.db.update(schema_1.reservations)
-            .set({ stage: status })
-            .where((0, drizzle_orm_1.eq)(schema_1.reservations.id, reservationId))
-            .returning();
-        const updated = updatedBooking || updatedRes;
+        const updated = updatedBooking;
         if (updated) {
             const currentYear = new Date().getFullYear();
             const today = new Date().toISOString().split('T')[0];
-            const phone = updated.customerPhone || updated.phone;
-            const restId = updated.clientId || updated.restaurantId;
+            const phone = updated.customerPhone;
+            const clientId = updated.clientId;
             if (status === 'seated' || status === 'completed') {
                 const updates = { lastDinedAt: today };
                 if (updated.occasion === 'birthday') {
                     updates.birthdayDiscountClaimedYear = currentYear;
                 }
-                if (phone && restId) {
+                if (phone && clientId) {
                     await connection_1.db
                         .update(schema_1.conversations)
                         .set(updates)
-                        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.conversations.phone, phone), (0, drizzle_orm_1.eq)(schema_1.conversations.restaurantId, restId)));
+                        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.conversations.phone, phone), (0, drizzle_orm_1.eq)(schema_1.conversations.clientId, clientId)));
                 }
                 // Schedule 2-Hour Asynchronous Same-Day Review Delay Queue
                 await (0, reviewEngine_1.scheduleSameDayReview)(updated.id, 120);
@@ -1095,51 +1071,6 @@ app.post('/api/agency/embedded-signup/exchange', (0, auth_1.requireRole)(['agenc
                 active: readyToActivate
             });
         }
-        // Upsert into restaurants table for backward compatibility
-        const existingRest = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.slug, cleanSlug)).limit(1);
-        if (existingRest.length > 0) {
-            await connection_1.db.update(schema_1.restaurants).set({
-                name: businessName,
-                address: address || '',
-                wabaId: resolvedWabaId,
-                whatsappPhoneNumberId: resolvedPhoneId || existingRest[0].whatsappPhoneNumberId,
-                metaAccessToken: resolvedToken || existingRest[0].metaAccessToken,
-                metaBusinessId,
-                embeddedSignupCompletedAt: embeddedSignupCompletedAt || existingRest[0].embeddedSignupCompletedAt,
-                tokenExpiresAt: tokenExpiresAt || existingRest[0].tokenExpiresAt,
-                onboardingStatus,
-                prefix,
-                managerPhone: managerPhone || '',
-                openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '',
-                openingHoursDinner: openingHoursDinner || '19:00-00:30',
-                googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
-                customWelcomeText: customWelcomeText || null,
-                customMenuText: customMenuText || null,
-                active: readyToActivate
-            }).where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, existingRest[0].id));
-        }
-        else {
-            await connection_1.db.insert(schema_1.restaurants).values({
-                name: businessName,
-                slug: cleanSlug,
-                address: address || '',
-                wabaId: resolvedWabaId,
-                whatsappPhoneNumberId: resolvedPhoneId || 'PENDING_SETUP',
-                metaAccessToken: resolvedToken || 'PENDING_SETUP',
-                metaBusinessId,
-                embeddedSignupCompletedAt,
-                tokenExpiresAt,
-                onboardingStatus,
-                prefix,
-                managerPhone: managerPhone || '',
-                openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '',
-                openingHoursDinner: openingHoursDinner || '19:00-00:30',
-                googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
-                customWelcomeText: customWelcomeText || null,
-                customMenuText: customMenuText || null,
-                active: readyToActivate
-            });
-        }
         console.log(`✅ [Provisioning Success]: Client '${cleanSlug}' onboarded (status=${onboardingStatus}, active=${readyToActivate})`);
         return res.json({
             success: true,
@@ -1473,65 +1404,42 @@ app.get('/agency', (0, auth_1.requireRole)(['agency_admin']), async (req, res) =
     }
 });
 // Multi-tenant slug route & fallback (Checks both clients & restaurants tables safely)
+// Multi-tenant slug route & ledger (Standardized on clients & bookings tables)
 // FIX (critical): full reservation logbook (customer names + phone numbers)
 // for any tenant was reachable by anyone who guessed a slug — a slugified
 // business name is trivially guessable. Now auth-gated to tenant owner or agency admin.
-app.get('/restaurant/:slug?', (0, auth_1.requireTenantAccess)('slug'), async (req, res) => {
+app.get(['/restaurant/:slug?', '/client/:slug?'], (0, auth_1.requireTenantAccess)('slug'), async (req, res) => {
     try {
         const targetSlug = req.params.slug || '';
         if (!targetSlug) {
-            return res.status(400).send('Restaurant slug required.');
+            return res.status(400).send('Client slug required.');
         }
-        // Check clients table first
-        let clientMatches = await connection_1.db.select().from(schema_1.clients).where((0, drizzle_orm_1.eq)(schema_1.clients.slug, targetSlug)).limit(1);
-        let restaurantMatches = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.slug, targetSlug)).limit(1);
+        // Check clients table
+        const clientMatches = await connection_1.db.select().from(schema_1.clients).where((0, drizzle_orm_1.eq)(schema_1.clients.slug, targetSlug)).limit(1);
         const client = clientMatches[0];
-        const restaurant = restaurantMatches[0];
-        if (!client && !restaurant) {
-            return res.status(404).send('Restaurant not found.');
+        if (!client) {
+            return res.status(404).send('Client not found.');
         }
-        const displayName = client?.businessName || restaurant?.name || targetSlug;
-        const displaySlug = client?.slug || restaurant?.slug || targetSlug;
-        const clientId = client?.id;
-        const restaurantId = restaurant?.id;
-        // Query bookings / reservations cleanly
-        let allRes = [];
-        if (clientId) {
-            const clientBookings = await connection_1.db
-                .select()
-                .from(schema_1.bookings)
-                .where((0, drizzle_orm_1.eq)(schema_1.bookings.clientId, clientId))
-                .orderBy((0, drizzle_orm_1.desc)(schema_1.bookings.createdAt));
-            allRes = clientBookings.map(b => ({
-                id: b.id,
-                customerName: b.customerName || 'Guest',
-                customerPhone: b.customerPhone,
-                guests: b.guests,
-                occasion: b.occasion,
-                date: b.date,
-                time: b.time,
-                reservationCode: b.reservationCode || 'BBC-RES-1001',
-                stage: b.status || 'booked',
-            }));
-        }
-        if (allRes.length === 0 && restaurantId) {
-            const restReservations = await connection_1.db
-                .select()
-                .from(schema_1.reservations)
-                .where((0, drizzle_orm_1.eq)(schema_1.reservations.restaurantId, restaurantId))
-                .orderBy((0, drizzle_orm_1.desc)(schema_1.reservations.createdAt));
-            allRes = restReservations.map(r => ({
-                id: r.id,
-                customerName: r.customerName || 'Guest',
-                customerPhone: r.customerPhone,
-                guests: r.guests,
-                occasion: r.occasion,
-                date: r.date,
-                time: r.time,
-                reservationCode: r.reservationCode || 'RES-1001',
-                stage: r.stage || 'booked',
-            }));
-        }
+        const displayName = client.businessName || targetSlug;
+        const displaySlug = client.slug || targetSlug;
+        const clientId = client.id;
+        // Query bookings cleanly
+        const clientBookings = await connection_1.db
+            .select()
+            .from(schema_1.bookings)
+            .where((0, drizzle_orm_1.eq)(schema_1.bookings.clientId, clientId))
+            .orderBy((0, drizzle_orm_1.desc)(schema_1.bookings.createdAt));
+        const allRes = clientBookings.map(b => ({
+            id: b.id,
+            customerName: b.customerName || 'Guest',
+            customerPhone: b.customerPhone,
+            guests: b.guests,
+            occasion: b.occasion,
+            date: b.date,
+            time: b.time,
+            reservationCode: b.reservationCode || 'RES-1001',
+            stage: b.status || 'booked',
+        }));
         const totalReservations = allRes.filter(r => r.stage !== 'cancelled').length;
         const seatedCount = allRes.filter(r => r.stage === 'seated').length;
         const birthdays = allRes.filter(r => r.occasion?.toLowerCase() === 'birthday').length;

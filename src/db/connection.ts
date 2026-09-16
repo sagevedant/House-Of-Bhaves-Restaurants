@@ -28,7 +28,7 @@ export const sqlite = createClient({
 export const db = drizzle(sqlite, { schema });
 
 export async function initializeDatabase() {
-  // Commercial Agency Tables
+  // Commercial Agency & Multi-Tenant Tables
   await sqlite.execute(`
     CREATE TABLE IF NOT EXISTS clients (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,9 +38,17 @@ export async function initializeDatabase() {
       outbound_allowance_monthly INTEGER DEFAULT 1000,
       outbound_sent_this_month INTEGER DEFAULT 0,
       next_monthly_reset_date TEXT,
+      waba_id TEXT,
       whatsapp_phone_number_id TEXT NOT NULL,
       meta_access_token TEXT NOT NULL,
+      meta_business_id TEXT,
+      system_user_id TEXT,
+      embedded_signup_completed_at TEXT,
+      token_expires_at TEXT,
+      onboarding_status TEXT DEFAULT 'legacy',
       prefix TEXT DEFAULT 'HOB',
+      address TEXT DEFAULT '',
+      manager_phone TEXT DEFAULT '',
       google_review_url TEXT DEFAULT 'https://maps.google.com',
       custom_welcome_text TEXT,
       custom_menu_text TEXT,
@@ -86,37 +94,11 @@ export async function initializeDatabase() {
     )
   `);
 
-  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_customers_phone_client ON customers(phone_number, client_id)`);
-  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)`);
-  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date)`);
-
-  // Single Restaurant / Legacy Tables
-  await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS restaurants (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      slug TEXT NOT NULL DEFAULT 'hob-restaurant',
-      address TEXT NOT NULL,
-      whatsapp_phone_number_id TEXT NOT NULL,
-      meta_access_token TEXT NOT NULL,
-      prefix TEXT NOT NULL,
-      manager_phone TEXT,
-      opening_hours_lunch TEXT DEFAULT '12:00-15:30',
-      opening_hours_dinner TEXT DEFAULT '19:00-23:00',
-      closed_days TEXT DEFAULT '',
-      max_pax_normal INTEGER DEFAULT 12,
-      google_review_url TEXT DEFAULT 'https://maps.google.com',
-      custom_welcome_text TEXT,
-      custom_menu_text TEXT,
-      active INTEGER DEFAULT 1
-    )
-  `);
-
   await sqlite.execute(`
     CREATE TABLE IF NOT EXISTS conversations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       phone TEXT NOT NULL,
-      restaurant_id INTEGER NOT NULL REFERENCES restaurants(id),
+      client_id INTEGER NOT NULL REFERENCES clients(id),
       customer_name TEXT,
       current_step TEXT DEFAULT 'entry',
       step_data TEXT DEFAULT '{}',
@@ -124,24 +106,6 @@ export async function initializeDatabase() {
       birthday_discount_claimed_year INTEGER,
       last_dined_at TEXT,
       updated_at TEXT
-    )
-  `);
-
-  await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS reservations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      restaurant_id INTEGER NOT NULL REFERENCES restaurants(id),
-      customer_name TEXT,
-      customer_phone TEXT NOT NULL,
-      guests INTEGER NOT NULL DEFAULT 2,
-      occasion TEXT DEFAULT 'casual',
-      date TEXT NOT NULL,
-      time TEXT NOT NULL,
-      reservation_code TEXT UNIQUE,
-      stage TEXT DEFAULT 'booked',
-      special_request TEXT,
-      review_sent INTEGER DEFAULT 0,
-      created_at TEXT
     )
   `);
 
@@ -157,13 +121,15 @@ export async function initializeDatabase() {
     )
   `);
 
-  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_conversations_phone_restaurant ON conversations(phone, restaurant_id)`);
-  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_reservations_stage ON reservations(stage)`);
-  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_reservations_date ON reservations(date)`);
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_customers_phone_client ON customers(phone_number, client_id)`);
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)`);
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date)`);
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_client_id ON bookings(client_id)`);
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_conversations_phone_client ON conversations(phone, client_id)`);
   await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
   await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_users_client_id ON users(client_id)`);
 
-  // Safe Migration Alter Helpers
+  // Safe Migration Alter Helpers for existing databases
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN billing_cycle TEXT DEFAULT 'monthly';`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN outbound_allowance_monthly INTEGER DEFAULT 1000;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN outbound_sent_this_month INTEGER DEFAULT 0;`); } catch {}
@@ -178,17 +144,12 @@ export async function initializeDatabase() {
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN embedded_signup_completed_at TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN token_expires_at TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN onboarding_status TEXT DEFAULT 'legacy';`); } catch {}
-
-  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN custom_welcome_text TEXT;`); } catch {}
-  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN custom_menu_text TEXT;`); } catch {}
-  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN waba_id TEXT;`); } catch {}
-  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN meta_business_id TEXT;`); } catch {}
-  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN embedded_signup_completed_at TEXT;`); } catch {}
-  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN token_expires_at TEXT;`); } catch {}
-  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN onboarding_status TEXT DEFAULT 'legacy';`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN address TEXT DEFAULT '';`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN manager_phone TEXT DEFAULT '';`); } catch {}
 
   try { await sqlite.execute(`ALTER TABLE customers ADD COLUMN last_inbound_interaction TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE bookings ADD COLUMN review_scheduled_at TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE conversations ADD COLUMN client_id INTEGER REFERENCES clients(id);`); } catch {}
 
   // Safe PRAGMA Execution (Skipped cleanly on Turso Cloud HTTP)
   try { await sqlite.execute(`PRAGMA journal_mode = WAL`); } catch {}

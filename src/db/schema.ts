@@ -1,7 +1,7 @@
 import { sqliteTable, integer, text, index } from 'drizzle-orm/sqlite-core';
 
 // ----------------------------------------------------
-// COMMERCIAL AGENCY LAYER (Tiers, Quotas, Customers, Bookings)
+// MULTI-TENANT AGENCY DATA LAYER
 // ----------------------------------------------------
 
 export const clients = sqliteTable('clients', {
@@ -12,15 +12,17 @@ export const clients = sqliteTable('clients', {
   outboundAllowanceMonthly: integer('outbound_allowance_monthly').default(1000),
   outboundSentThisMonth: integer('outbound_sent_this_month').default(0),
   nextMonthlyResetDate: text('next_monthly_reset_date'), // YYYY-MM-DD
-  wabaId: text('waba_id'), // Meta WhatsApp Business Account ID (owned by client in Tech Provider model)
+  wabaId: text('waba_id'), // Meta WhatsApp Business Account ID (client-owned)
   whatsappPhoneNumberId: text('whatsapp_phone_number_id').notNull(),
   metaAccessToken: text('meta_access_token').notNull(),
-  metaBusinessId: text('meta_business_id'), // Client's Meta Business Manager Portfolio ID
-  systemUserId: text('system_user_id'), // Delegated System User ID under client's WABA
+  metaBusinessId: text('meta_business_id'), // Client Meta Business Portfolio ID
+  systemUserId: text('system_user_id'), // Delegated System User ID
   embeddedSignupCompletedAt: text('embedded_signup_completed_at'), // ISO string timestamp
   tokenExpiresAt: text('token_expires_at'), // ISO string timestamp for token expiry tracking
   onboardingStatus: text('onboarding_status', { enum: ['pending', 'connected', 'legacy', 'failed'] }).default('legacy'),
   prefix: text('prefix').notNull().default('HOB'),
+  address: text('address').default(''),
+  managerPhone: text('manager_phone').default(''),
   googleReviewUrl: text('google_review_url').default('https://maps.google.com'),
   customWelcomeText: text('custom_welcome_text'),
   customMenuText: text('custom_menu_text'),
@@ -68,40 +70,13 @@ export const bookings = sqliteTable('bookings', {
 }, (table) => ({
   idxBookingsStatus: index('idx_bookings_status').on(table.status),
   idxBookingsDate: index('idx_bookings_date').on(table.date),
+  idxBookingsClientId: index('idx_bookings_client_id').on(table.clientId),
 }));
-
-// ----------------------------------------------------
-// SINGLE RESTAURANT LAYER (Legacy / Backward Compatibility)
-// ----------------------------------------------------
-
-export const restaurants = sqliteTable('restaurants', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  name: text('name').notNull(),
-  slug: text('slug').notNull().default('hob-restaurant'),
-  address: text('address').notNull(),
-  wabaId: text('waba_id'), // Meta WABA ID
-  whatsappPhoneNumberId: text('whatsapp_phone_number_id').notNull(),
-  metaAccessToken: text('meta_access_token').notNull(),
-  metaBusinessId: text('meta_business_id'),
-  embeddedSignupCompletedAt: text('embedded_signup_completed_at'),
-  tokenExpiresAt: text('token_expires_at'),
-  onboardingStatus: text('onboarding_status', { enum: ['pending', 'connected', 'legacy', 'failed'] }).default('legacy'),
-  prefix: text('prefix').notNull(),
-  managerPhone: text('manager_phone'),
-  openingHoursLunch: text('opening_hours_lunch').default('12:00-15:30'),
-  openingHoursDinner: text('opening_hours_dinner').default('19:00-23:00'),
-  closedDays: text('closed_days').default(''),
-  maxPaxNormal: integer('max_pax_normal').default(12),
-  googleReviewUrl: text('google_review_url').default('https://maps.google.com'),
-  customWelcomeText: text('custom_welcome_text'),
-  customMenuText: text('custom_menu_text'),
-  active: integer('active', { mode: 'boolean' }).default(true),
-});
 
 export const conversations = sqliteTable('conversations', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   phone: text('phone').notNull(),
-  restaurantId: integer('restaurant_id').notNull().references(() => restaurants.id),
+  clientId: integer('client_id').notNull().references(() => clients.id),
   customerName: text('customer_name'),
   currentStep: text('current_step', {
     enum: ['entry', 'guests', 'occasion', 'datetime_date', 'datetime_time', 'confirm', 'finalized'],
@@ -112,35 +87,8 @@ export const conversations = sqliteTable('conversations', {
   lastDinedAt: text('last_dined_at'), // YYYY-MM-DD
   updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
 }, (table) => ({
-  idxConversationsPhoneRestaurant: index('idx_conversations_phone_restaurant').on(table.phone, table.restaurantId),
+  idxConversationsPhoneClient: index('idx_conversations_phone_client').on(table.phone, table.clientId),
 }));
-
-export const reservations = sqliteTable('reservations', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  restaurantId: integer('restaurant_id').notNull().references(() => restaurants.id),
-  customerName: text('customer_name'),
-  customerPhone: text('customer_phone').notNull(),
-  guests: integer('guests').notNull().default(2),
-  occasion: text('occasion', {
-    enum: ['casual', 'birthday', 'anniversary', 'corporate', 'party'],
-  }).default('casual'),
-  date: text('date').notNull(), // YYYY-MM-DD
-  time: text('time').notNull(), // HH:MM (24h)
-  reservationCode: text('reservation_code').unique(),
-  stage: text('stage', {
-    enum: ['booked', 'seated', 'reminded', 'completed', 'no_show', 'cancelled'],
-  }).default('booked'),
-  specialRequest: text('special_request'),
-  reviewSent: integer('review_sent', { mode: 'boolean' }).default(false),
-  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
-}, (table) => ({
-  idxReservationsStage: index('idx_reservations_stage').on(table.stage),
-  idxReservationsDate: index('idx_reservations_date').on(table.date),
-}));
-
-// ----------------------------------------------------
-// AUTHENTICATION & MULTI-TENANT USERS
-// ----------------------------------------------------
 
 export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -164,14 +112,8 @@ export type InsertCustomer = typeof customers.$inferInsert;
 export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = typeof bookings.$inferInsert;
 
-export type Restaurant = typeof restaurants.$inferSelect;
-export type InsertRestaurant = typeof restaurants.$inferInsert;
-
 export type Conversation = typeof conversations.$inferSelect;
 export type InsertConversation = typeof conversations.$inferInsert;
-
-export type Reservation = typeof reservations.$inferSelect;
-export type InsertReservation = typeof reservations.$inferInsert;
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -181,9 +123,9 @@ export interface StepData {
   occasion?: 'casual' | 'birthday' | 'anniversary' | 'corporate' | 'party';
   date?: string;       // YYYY-MM-DD
   time?: string;       // HH:MM
+  bookingId?: number;
   reservationId?: number;
   reservationCode?: string;
   specialRequest?: string;
   customerName?: string;
 }
-

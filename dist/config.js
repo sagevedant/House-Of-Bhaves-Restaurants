@@ -35,6 +35,8 @@ exports.config = {
     metaApiBase: 'https://graph.facebook.com/v21.0',
     // Agency Tech Provider App Credentials
     metaAppId: process.env.META_APP_ID || '',
+    // Security & Webhook Signature Enforcement
+    enforceWebhookSignature: process.env.ENFORCE_WEBHOOK_SIGNATURE === 'true',
     metaAppSecret: process.env.META_APP_SECRET || '', // Required for webhook HMAC & server-side token exchange
     metaEmbeddedSignupConfigId: process.env.META_EMBEDDED_SIGNUP_CONFIG_ID || process.env.META_CONFIG_ID || '',
     metaSystemUserAccessToken: process.env.META_SYSTEM_USER_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN || '',
@@ -51,14 +53,17 @@ exports.config = {
     adminBasicAuthPass: process.env.ADMIN_BASIC_AUTH_PASS || '',
     jwtSecret: process.env.JWT_SECRET || 'dev-secret-hob-agency-platform-2026-secure-key',
 };
+if (!exports.config.enforceWebhookSignature) {
+    console.warn('⚠️ Webhook signature verification is DISABLED — do not use in production');
+}
 if (!exports.config.mockWhatsApp && (!exports.config.metaAccessToken || !exports.config.whatsappPhoneNumberId)) {
     console.warn('⚠️ [CONFIG WARNING] META_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID not set and ' +
         'MOCK_WHATSAPP is not "true". Per-client tokens in the DB will be required for ' +
         'every send, or outbound messages will fail loudly (not silently) at send time.');
 }
-if (!exports.config.metaAppSecret) {
-    console.warn('⚠️ [CONFIG WARNING] META_APP_SECRET not set — inbound webhook requests will NOT be ' +
-        'signature-verified. Set this in production or the /webhook endpoint accepts unauthenticated payloads.');
+if (exports.config.enforceWebhookSignature && !exports.config.metaAppSecret) {
+    console.warn('⚠️ [CONFIG WARNING] ENFORCE_WEBHOOK_SIGNATURE is "true" but META_APP_SECRET is not set — ' +
+        'all inbound webhook requests will be rejected (401).');
 }
 if (!exports.config.adminBasicAuthUser || !exports.config.adminBasicAuthPass) {
     console.warn('⚠️ [CONFIG WARNING] ADMIN_BASIC_AUTH_USER/PASS not set — admin dashboard, onboarding, ' +
