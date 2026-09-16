@@ -1,45 +1,40 @@
+import { DateTime } from 'luxon';
+
+export const ZONE_IST = 'Asia/Kolkata';
+
 export function nowIST(): Date {
-  const date = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  return new Date(date.getTime() + date.getTimezoneOffset() * 60 * 1000 + istOffset);
+  return DateTime.now().setZone(ZONE_IST).toJSDate();
 }
 
 export function toIST(date: Date): Date {
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  return new Date(date.getTime() + date.getTimezoneOffset() * 60 * 1000 + istOffset);
+  return DateTime.fromJSDate(date).setZone(ZONE_IST).toJSDate();
 }
 
 export function todayIST(): string {
-  const ist = nowIST();
-  return ist.toISOString().split('T')[0];
+  return DateTime.now().setZone(ZONE_IST).toFormat('yyyy-MM-dd');
 }
 
 export function currentTimeIST(): string {
-  const ist = nowIST();
-  return ist.toISOString().split('T')[1].substring(0, 5);
+  return DateTime.now().setZone(ZONE_IST).toFormat('HH:mm');
 }
 
 export function tomorrowIST(): string {
-  const ist = nowIST();
-  ist.setDate(ist.getDate() + 1);
-  return ist.toISOString().split('T')[0];
+  return DateTime.now().setZone(ZONE_IST).plus({ days: 1 }).toFormat('yyyy-MM-dd');
 }
 
 export function dayAfterTomorrowIST(): string {
-  const ist = nowIST();
-  ist.setDate(ist.getDate() + 2);
-  return ist.toISOString().split('T')[0];
+  return DateTime.now().setZone(ZONE_IST).plus({ days: 2 }).toFormat('yyyy-MM-dd');
 }
 
 export function getNextNDaysIST(count: number): { dateStr: string; label: string; dayName: string }[] {
   const days: { dateStr: string; label: string; dayName: string }[] = [];
+  const base = DateTime.now().setZone(ZONE_IST);
 
   for (let i = 0; i < count; i++) {
-    const d = nowIST();
-    d.setDate(d.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
-    const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-    const formattedDate = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+    const d = base.plus({ days: i });
+    const dateStr = d.toFormat('yyyy-MM-dd');
+    const dayName = d.setLocale('en-US').toFormat('ccc');
+    const formattedDate = d.setLocale('en-US').toFormat('dd LLL');
     
     let label = '';
     if (i === 0) label = `Today · ${formattedDate}`;
@@ -52,26 +47,30 @@ export function getNextNDaysIST(count: number): { dateStr: string; label: string
 }
 
 export function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const options: Intl.DateTimeFormatOptions = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' };
-  return date.toLocaleDateString('en-GB', options);
+  const dt = DateTime.fromISO(dateStr, { zone: ZONE_IST });
+  if (!dt.isValid) {
+    // Fallback for non-ISO standard formats
+    const parsed = DateTime.fromFormat(dateStr, 'yyyy-MM-dd', { zone: ZONE_IST });
+    if (parsed.isValid) {
+      return parsed.setLocale('en-US').toFormat('ccc, dd LLL yyyy');
+    }
+    return dateStr;
+  }
+  return dt.setLocale('en-US').toFormat('ccc, dd LLL yyyy');
 }
 
 export function formatTime(time24: string): string {
-  const [hours, minutes] = time24.split(':');
-  const h = parseInt(hours, 10);
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 || 12;
-  return `${h12}:${minutes} ${ampm}`;
+  const dt = DateTime.fromFormat(time24.trim(), 'HH:mm', { zone: ZONE_IST });
+  if (!dt.isValid) return time24;
+  return dt.toFormat('h:mm a');
 }
 
 export function parseISTDateTime(dateStr: string, time24: string): Date {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const [hours, minutes] = time24.split(':').map(Number);
-  
-  const pseudoDate = new Date(Date.UTC(year, month - 1, day, hours, minutes));
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  return new Date(pseudoDate.getTime() - istOffset);
+  const dt = DateTime.fromFormat(`${dateStr.trim()} ${time24.trim()}`, 'yyyy-MM-dd HH:mm', { zone: ZONE_IST });
+  if (!dt.isValid) {
+    throw new Error(`Invalid date/time format: ${dateStr} ${time24}`);
+  }
+  return dt.toJSDate();
 }
 
 export function isWithinHoursRange(time: string, start: string, end: string): boolean {
@@ -79,14 +78,19 @@ export function isWithinHoursRange(time: string, start: string, end: string): bo
 }
 
 export function isPastByHours(dateStr: string, time24: string, hours: number): boolean {
-  const dateTime = parseISTDateTime(dateStr, time24);
-  const diff = nowIST().getTime() - dateTime.getTime();
-  return diff > hours * 60 * 60 * 1000;
+  const dt = DateTime.fromFormat(`${dateStr.trim()} ${time24.trim()}`, 'yyyy-MM-dd HH:mm', { zone: ZONE_IST });
+  const now = DateTime.now().setZone(ZONE_IST);
+  const diffHours = now.diff(dt, 'hours').hours;
+  return diffHours > hours;
 }
 
 export function getDayName(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+  const dt = DateTime.fromISO(dateStr, { zone: ZONE_IST });
+  if (!dt.isValid) {
+    const parsed = DateTime.fromFormat(dateStr, 'yyyy-MM-dd', { zone: ZONE_IST });
+    return parsed.isValid ? parsed.setLocale('en-US').toFormat('cccc').toLowerCase() : '';
+  }
+  return dt.setLocale('en-US').toFormat('cccc').toLowerCase();
 }
 
 export function isSunday(dateStr: string): boolean {
@@ -106,18 +110,8 @@ export function isWithinOperatingHours(time24: string, lunchHours: string, dinne
 }
 
 /**
- * FIX (logic bug): slots that wrap past midnight (e.g. dinner "19:00-00:30")
- * previously stored display-corrected strings like "00:30" and then filtered
- * "today" slots via plain string comparison (`s >= nowTime`). Lexically,
- * "00:30" < "19:00", so a genuinely-future post-midnight slot would be
- * incorrectly dropped (or an already-past slot incorrectly kept) depending
- * on current time — a bug that only manifests late at night and is easy to
- * miss in testing.
- *
- * Fix: track each slot's *actual minutes-since-midnight-of-the-lunch/dinner-
- * window-start* (allowing values >= 1440 for post-midnight slots) alongside
- * its display string, and filter using that numeric value instead of the
- * display string.
+ * Generates available time slots for lunch and dinner windows.
+ * Handles midnight rollovers (e.g. 19:00 - 00:30) with minute calculations.
  */
 export function getAvailableTimeSlots(date: string, lunchHours: string, dinnerHours: string): { period: string; slots: string[] }[] {
   interface SlotEntry {
@@ -142,8 +136,6 @@ export function getAvailableTimeSlots(date: string, lunchHours: string, dinnerHo
     while (h < eh || (h === eh && m <= em)) {
       const displayH = h >= 24 ? h - 24 : h;
       const display = `${displayH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-      // minutesFromWindowStart lets us compare "is this slot still in the
-      // future" using arithmetic instead of lexical string comparison.
       const minutesFromWindowStart = h * 60 + m;
       slots.push({ display, minutesFromWindowStart });
       m += 30;
@@ -162,17 +154,6 @@ export function getAvailableTimeSlots(date: string, lunchHours: string, dinnerHo
     const nowTime = currentTimeIST();
     const [nowH, nowM] = nowTime.split(':').map(Number);
     const nowMinutes = nowH * 60 + nowM;
-    // A post-midnight slot (minutesFromWindowStart >= 1440) is only "past"
-    // if we've also wrapped past midnight in real time relative to the
-    // window; since both lunch and dinner windows start same-day, we
-    // compare against nowMinutes directly — values >=1440 always compare
-    // as "still ahead" today, which is correct: e.g. dinner window
-    // 19:00-00:30 with now=21:00 (1260 min) should keep the 00:30 slot
-    // (1470 min), which now correctly passes 1470 >= 1260.
-    // If "now" is itself past midnight (e.g. 00:15 the next calendar day),
-    // todayIST() would already refer to that new day and the dinner window
-    // from the *previous* day is no longer relevant, so no special-casing
-    // needed beyond straightforward minute arithmetic here.
     lunchSlots = lunchSlots.filter(s => s.minutesFromWindowStart >= nowMinutes);
     dinnerSlots = dinnerSlots.filter(s => s.minutesFromWindowStart >= nowMinutes);
   }
@@ -195,9 +176,9 @@ export function resolveDateInput(input: string): string | null {
 
   // Try parsing month names and numbers (e.g. "3rd august", "3 aug", "august 3")
   const months: Record<string, number> = {
-    jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3,
-    may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7,
-    sep: 8, september: 8, oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11
+    jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4,
+    may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8,
+    sep: 9, september: 9, oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12
   };
 
   const dayMatch = i.match(/(\d{1,2})(st|nd|rd|th)?/);
@@ -206,30 +187,27 @@ export function resolveDateInput(input: string): string | null {
   if (dayMatch && monthMatch) {
     const dayNum = parseInt(dayMatch[1], 10);
     const monthNum = months[monthMatch];
-    const now = nowIST();
-    let year = now.getFullYear();
-    const d = new Date(year, monthNum, dayNum);
+    const now = DateTime.now().setZone(ZONE_IST);
+    let year = now.year;
+    let dt = DateTime.fromObject({ year, month: monthNum, day: dayNum }, { zone: ZONE_IST });
 
-    if (d < now) {
-      d.setFullYear(year + 1);
+    if (dt < now.startOf('day')) {
+      dt = dt.plus({ years: 1 });
     }
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+    return dt.toFormat('yyyy-MM-dd');
   }
 
-  // Try parsing weekday names (e.g. "monday", "friday", "mon", "aug 3")
-  const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  const targetDayIdx = weekdays.indexOf(i);
-  if (targetDayIdx !== -1) {
-    const now = nowIST();
-    const currentDayIdx = now.getDay();
+  // Try parsing weekday names (e.g. "monday", "friday", "mon")
+  const weekdayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  const targetDayIdx = weekdayNames.indexOf(i) + 1; // Luxon: Monday=1, Sunday=7
+  if (targetDayIdx > 0) {
+    const now = DateTime.now().setZone(ZONE_IST);
+    const currentDayIdx = now.weekday; // 1..7
     let diff = targetDayIdx - currentDayIdx;
     if (diff <= 0) diff += 7;
-    now.setDate(now.getDate() + diff);
-    return now.toISOString().split('T')[0];
+    return now.plus({ days: diff }).toFormat('yyyy-MM-dd');
   }
 
   return null;
 }
+

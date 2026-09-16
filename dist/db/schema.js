@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.reservations = exports.conversations = exports.restaurants = exports.bookings = exports.customers = exports.clients = void 0;
+exports.users = exports.reservations = exports.conversations = exports.restaurants = exports.bookings = exports.customers = exports.clients = void 0;
 const sqlite_core_1 = require("drizzle-orm/sqlite-core");
 // ----------------------------------------------------
 // COMMERCIAL AGENCY LAYER (Tiers, Quotas, Customers, Bookings)
@@ -13,8 +13,14 @@ exports.clients = (0, sqlite_core_1.sqliteTable)('clients', {
     outboundAllowanceMonthly: (0, sqlite_core_1.integer)('outbound_allowance_monthly').default(1000),
     outboundSentThisMonth: (0, sqlite_core_1.integer)('outbound_sent_this_month').default(0),
     nextMonthlyResetDate: (0, sqlite_core_1.text)('next_monthly_reset_date'), // YYYY-MM-DD
+    wabaId: (0, sqlite_core_1.text)('waba_id'), // Meta WhatsApp Business Account ID (owned by client in Tech Provider model)
     whatsappPhoneNumberId: (0, sqlite_core_1.text)('whatsapp_phone_number_id').notNull(),
     metaAccessToken: (0, sqlite_core_1.text)('meta_access_token').notNull(),
+    metaBusinessId: (0, sqlite_core_1.text)('meta_business_id'), // Client's Meta Business Manager Portfolio ID
+    systemUserId: (0, sqlite_core_1.text)('system_user_id'), // Delegated System User ID under client's WABA
+    embeddedSignupCompletedAt: (0, sqlite_core_1.text)('embedded_signup_completed_at'), // ISO string timestamp
+    tokenExpiresAt: (0, sqlite_core_1.text)('token_expires_at'), // ISO string timestamp for token expiry tracking
+    onboardingStatus: (0, sqlite_core_1.text)('onboarding_status', { enum: ['pending', 'connected', 'legacy', 'failed'] }).default('legacy'),
     prefix: (0, sqlite_core_1.text)('prefix').notNull().default('HOB'),
     googleReviewUrl: (0, sqlite_core_1.text)('google_review_url').default('https://maps.google.com'),
     customWelcomeText: (0, sqlite_core_1.text)('custom_welcome_text'),
@@ -70,8 +76,13 @@ exports.restaurants = (0, sqlite_core_1.sqliteTable)('restaurants', {
     name: (0, sqlite_core_1.text)('name').notNull(),
     slug: (0, sqlite_core_1.text)('slug').notNull().default('hob-restaurant'),
     address: (0, sqlite_core_1.text)('address').notNull(),
+    wabaId: (0, sqlite_core_1.text)('waba_id'), // Meta WABA ID
     whatsappPhoneNumberId: (0, sqlite_core_1.text)('whatsapp_phone_number_id').notNull(),
     metaAccessToken: (0, sqlite_core_1.text)('meta_access_token').notNull(),
+    metaBusinessId: (0, sqlite_core_1.text)('meta_business_id'),
+    embeddedSignupCompletedAt: (0, sqlite_core_1.text)('embedded_signup_completed_at'),
+    tokenExpiresAt: (0, sqlite_core_1.text)('token_expires_at'),
+    onboardingStatus: (0, sqlite_core_1.text)('onboarding_status', { enum: ['pending', 'connected', 'legacy', 'failed'] }).default('legacy'),
     prefix: (0, sqlite_core_1.text)('prefix').notNull(),
     managerPhone: (0, sqlite_core_1.text)('manager_phone'),
     openingHoursLunch: (0, sqlite_core_1.text)('opening_hours_lunch').default('12:00-15:30'),
@@ -120,5 +131,20 @@ exports.reservations = (0, sqlite_core_1.sqliteTable)('reservations', {
 }, (table) => ({
     idxReservationsStage: (0, sqlite_core_1.index)('idx_reservations_stage').on(table.stage),
     idxReservationsDate: (0, sqlite_core_1.index)('idx_reservations_date').on(table.date),
+}));
+// ----------------------------------------------------
+// AUTHENTICATION & MULTI-TENANT USERS
+// ----------------------------------------------------
+exports.users = (0, sqlite_core_1.sqliteTable)('users', {
+    id: (0, sqlite_core_1.integer)('id').primaryKey({ autoIncrement: true }),
+    email: (0, sqlite_core_1.text)('email').notNull().unique(),
+    passwordHash: (0, sqlite_core_1.text)('password_hash').notNull(),
+    role: (0, sqlite_core_1.text)('role', { enum: ['agency_admin', 'client_owner'] }).notNull().default('client_owner'),
+    clientId: (0, sqlite_core_1.integer)('client_id').references(() => exports.clients.id),
+    createdAt: (0, sqlite_core_1.text)('created_at').$defaultFn(() => new Date().toISOString()),
+    updatedAt: (0, sqlite_core_1.text)('updated_at').$defaultFn(() => new Date().toISOString()),
+}, (table) => ({
+    idxUsersEmail: (0, sqlite_core_1.index)('idx_users_email').on(table.email),
+    idxUsersClientId: (0, sqlite_core_1.index)('idx_users_client_id').on(table.clientId),
 }));
 //# sourceMappingURL=schema.js.map

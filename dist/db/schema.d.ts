@@ -129,6 +129,25 @@ export declare const clients: import("drizzle-orm/sqlite-core").SQLiteTableWithC
         }, {}, {
             length: number | undefined;
         }>;
+        wabaId: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "waba_id";
+            tableName: "clients";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
         whatsappPhoneNumberId: import("drizzle-orm/sqlite-core").SQLiteColumn<{
             name: "whatsapp_phone_number_id";
             tableName: "clients";
@@ -161,6 +180,101 @@ export declare const clients: import("drizzle-orm/sqlite-core").SQLiteTableWithC
             isAutoincrement: false;
             hasRuntimeDefault: false;
             enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        metaBusinessId: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "meta_business_id";
+            tableName: "clients";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        systemUserId: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "system_user_id";
+            tableName: "clients";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        embeddedSignupCompletedAt: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "embedded_signup_completed_at";
+            tableName: "clients";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        tokenExpiresAt: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "token_expires_at";
+            tableName: "clients";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        onboardingStatus: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "onboarding_status";
+            tableName: "clients";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: "pending" | "connected" | "legacy" | "failed";
+            driverParam: string;
+            notNull: false;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: ["pending", "connected", "legacy", "failed"];
             baseColumn: never;
             identity: undefined;
             generated: undefined;
@@ -871,6 +985,25 @@ export declare const restaurants: import("drizzle-orm/sqlite-core").SQLiteTableW
         }, {}, {
             length: number | undefined;
         }>;
+        wabaId: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "waba_id";
+            tableName: "restaurants";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
         whatsappPhoneNumberId: import("drizzle-orm/sqlite-core").SQLiteColumn<{
             name: "whatsapp_phone_number_id";
             tableName: "restaurants";
@@ -903,6 +1036,82 @@ export declare const restaurants: import("drizzle-orm/sqlite-core").SQLiteTableW
             isAutoincrement: false;
             hasRuntimeDefault: false;
             enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        metaBusinessId: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "meta_business_id";
+            tableName: "restaurants";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        embeddedSignupCompletedAt: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "embedded_signup_completed_at";
+            tableName: "restaurants";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        tokenExpiresAt: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "token_expires_at";
+            tableName: "restaurants";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        onboardingStatus: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "onboarding_status";
+            tableName: "restaurants";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: "pending" | "connected" | "legacy" | "failed";
+            driverParam: string;
+            notNull: false;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: ["pending", "connected", "legacy", "failed"];
             baseColumn: never;
             identity: undefined;
             generated: undefined;
@@ -1535,6 +1744,142 @@ export declare const reservations: import("drizzle-orm/sqlite-core").SQLiteTable
     };
     dialect: "sqlite";
 }>;
+export declare const users: import("drizzle-orm/sqlite-core").SQLiteTableWithColumns<{
+    name: "users";
+    schema: undefined;
+    columns: {
+        id: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "id";
+            tableName: "users";
+            dataType: "number";
+            columnType: "SQLiteInteger";
+            data: number;
+            driverParam: number;
+            notNull: true;
+            hasDefault: true;
+            isPrimaryKey: true;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
+        email: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "email";
+            tableName: "users";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: true;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        passwordHash: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "password_hash";
+            tableName: "users";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: true;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        role: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "role";
+            tableName: "users";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: "agency_admin" | "client_owner";
+            driverParam: string;
+            notNull: true;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: ["agency_admin", "client_owner"];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        clientId: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "client_id";
+            tableName: "users";
+            dataType: "number";
+            columnType: "SQLiteInteger";
+            data: number;
+            driverParam: number;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
+        createdAt: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "created_at";
+            tableName: "users";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: true;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+        updatedAt: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: "updated_at";
+            tableName: "users";
+            dataType: "string";
+            columnType: "SQLiteText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: true;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {
+            length: number | undefined;
+        }>;
+    };
+    dialect: "sqlite";
+}>;
 export type Client = typeof clients.$inferSelect;
 export type InsertClient = typeof clients.$inferInsert;
 export type Customer = typeof customers.$inferSelect;
@@ -1547,6 +1892,8 @@ export type Conversation = typeof conversations.$inferSelect;
 export type InsertConversation = typeof conversations.$inferInsert;
 export type Reservation = typeof reservations.$inferSelect;
 export type InsertReservation = typeof reservations.$inferInsert;
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
 export interface StepData {
     guests?: number;
     occasion?: 'casual' | 'birthday' | 'anniversary' | 'corporate' | 'party';

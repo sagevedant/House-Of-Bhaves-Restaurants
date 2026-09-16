@@ -4,9 +4,12 @@ export declare const config: {
     tursoAuthToken: string;
     absoluteDatabasePath: string;
     metaApiBase: string;
+    metaAppId: string;
+    metaAppSecret: string;
+    metaEmbeddedSignupConfigId: string;
+    metaSystemUserAccessToken: string;
     whatsappPhoneNumberId: string;
     metaAccessToken: string;
-    metaAppSecret: string;
     webhookVerifyToken: string;
     geminiApiKey: string;
     makeWebhookUrl: string;
@@ -14,5 +17,6 @@ export declare const config: {
     mockWhatsApp: boolean;
     adminBasicAuthUser: string;
     adminBasicAuthPass: string;
+    jwtSecret: string;
 };
 //# sourceMappingURL=config.d.ts.map

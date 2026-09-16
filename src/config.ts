@@ -9,7 +9,7 @@ dotenv.config();
 // database. That token has been REVOKED — rotate it in the Turso dashboard
 // and put the new one only in your real .env (never in source).
 //
-// We now fail fast at boot if required secrets are missing instead of
+// Fail fast at boot if required secrets are missing instead of
 // silently falling back to a baked-in credential.
 function requireEnv(name: string): string {
   const val = process.env[name];
@@ -19,7 +19,12 @@ function requireEnv(name: string): string {
       `Set it in your .env file — the app will not start without it.`
     );
   }
-  return val;
+  return val.trim();
+}
+
+if (!process.env.TURSO_DATABASE_URL || !process.env.TURSO_DATABASE_URL.trim() || 
+    !process.env.TURSO_AUTH_TOKEN || !process.env.TURSO_AUTH_TOKEN.trim()) {
+  throw new Error('[FATAL CONFIG ERROR] Missing TURSO_DATABASE_URL or TURSO_AUTH_TOKEN environment variable. Set them in your .env file.');
 }
 
 export const config = {
@@ -30,6 +35,8 @@ export const config = {
   metaApiBase: 'https://graph.facebook.com/v21.0',
   // Agency Tech Provider App Credentials
   metaAppId: process.env.META_APP_ID || '',
+  // Security & Webhook Signature Enforcement
+  enforceWebhookSignature: process.env.ENFORCE_WEBHOOK_SIGNATURE === 'true',
   metaAppSecret: process.env.META_APP_SECRET || '', // Required for webhook HMAC & server-side token exchange
   metaEmbeddedSignupConfigId: process.env.META_EMBEDDED_SIGNUP_CONFIG_ID || process.env.META_CONFIG_ID || '',
   metaSystemUserAccessToken: process.env.META_SYSTEM_USER_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN || '',
@@ -47,6 +54,10 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-hob-agency-platform-2026-secure-key',
 };
 
+if (!config.enforceWebhookSignature) {
+  console.warn('⚠️ Webhook signature verification is DISABLED — do not use in production');
+}
+
 if (!config.mockWhatsApp && (!config.metaAccessToken || !config.whatsappPhoneNumberId)) {
   console.warn(
     '⚠️ [CONFIG WARNING] META_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID not set and ' +
@@ -55,10 +66,10 @@ if (!config.mockWhatsApp && (!config.metaAccessToken || !config.whatsappPhoneNum
   );
 }
 
-if (!config.metaAppSecret) {
+if (config.enforceWebhookSignature && !config.metaAppSecret) {
   console.warn(
-    '⚠️ [CONFIG WARNING] META_APP_SECRET not set — inbound webhook requests will NOT be ' +
-    'signature-verified. Set this in production or the /webhook endpoint accepts unauthenticated payloads.'
+    '⚠️ [CONFIG WARNING] ENFORCE_WEBHOOK_SIGNATURE is "true" but META_APP_SECRET is not set — ' +
+    'all inbound webhook requests will be rejected (401).'
   );
 }
 

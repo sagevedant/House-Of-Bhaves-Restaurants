@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.seedDatabase = seedDatabase;
 require("dotenv/config");
@@ -92,6 +125,40 @@ async function seedDatabase() {
                 customWelcomeText: smizeWelcome,
                 customMenuText: smizeTreatments,
             }).where((0, drizzle_orm_1.eq)(schema_1.restaurants.id, existingSmizeRest.id));
+        }
+        // ----------------------------------------------------
+        // SEED AUTH USERS (agency_admin & client_owner)
+        // ----------------------------------------------------
+        const { users } = await Promise.resolve().then(() => __importStar(require('./schema')));
+        const { hashPassword } = await Promise.resolve().then(() => __importStar(require('../middleware/auth')));
+        // 1. Seed Agency Admin User
+        const adminEmail = 'admin@houseofbhaves.com';
+        const existingAdmin = await connection_1.db.select().from(users).where((0, drizzle_orm_1.eq)(users.email, adminEmail)).get();
+        if (!existingAdmin) {
+            const adminHash = await hashPassword('AdminPass123!');
+            await connection_1.db.insert(users).values({
+                email: adminEmail,
+                passwordHash: adminHash,
+                role: 'agency_admin',
+                clientId: null,
+            });
+            console.log('✅ Seed: Inserted default agency admin user (admin@houseofbhaves.com).');
+        }
+        // 2. Seed Smize Dental Client Owner User
+        const smizeClientRecord = await connection_1.db.select().from(schema_1.clients).where((0, drizzle_orm_1.eq)(schema_1.clients.slug, 'smize-dental')).get();
+        if (smizeClientRecord) {
+            const smizeEmail = 'owner@smizedental.com';
+            const existingSmizeUser = await connection_1.db.select().from(users).where((0, drizzle_orm_1.eq)(users.email, smizeEmail)).get();
+            if (!existingSmizeUser) {
+                const smizeHash = await hashPassword('SmizePass123!');
+                await connection_1.db.insert(users).values({
+                    email: smizeEmail,
+                    passwordHash: smizeHash,
+                    role: 'client_owner',
+                    clientId: smizeClientRecord.id,
+                });
+                console.log('✅ Seed: Inserted client owner user for Smize Dental (owner@smizedental.com).');
+            }
         }
     }
     catch (error) {

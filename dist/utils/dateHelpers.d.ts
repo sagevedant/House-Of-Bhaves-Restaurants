@@ -1,3 +1,4 @@
+export declare const ZONE_IST = "Asia/Kolkata";
 export declare function nowIST(): Date;
 export declare function toIST(date: Date): Date;
 export declare function todayIST(): string;
@@ -18,18 +19,8 @@ export declare function getDayName(dateStr: string): string;
 export declare function isSunday(dateStr: string): boolean;
 export declare function isWithinOperatingHours(time24: string, lunchHours: string, dinnerHours: string): boolean;
 /**
- * FIX (logic bug): slots that wrap past midnight (e.g. dinner "19:00-00:30")
- * previously stored display-corrected strings like "00:30" and then filtered
- * "today" slots via plain string comparison (`s >= nowTime`). Lexically,
- * "00:30" < "19:00", so a genuinely-future post-midnight slot would be
- * incorrectly dropped (or an already-past slot incorrectly kept) depending
- * on current time — a bug that only manifests late at night and is easy to
- * miss in testing.
- *
- * Fix: track each slot's *actual minutes-since-midnight-of-the-lunch/dinner-
- * window-start* (allowing values >= 1440 for post-midnight slots) alongside
- * its display string, and filter using that numeric value instead of the
- * display string.
+ * Generates available time slots for lunch and dinner windows.
+ * Handles midnight rollovers (e.g. 19:00 - 00:30) with minute calculations.
  */
 export declare function getAvailableTimeSlots(date: string, lunchHours: string, dinnerHours: string): {
     period: string;

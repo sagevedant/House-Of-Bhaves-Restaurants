@@ -1,67 +1,297 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requireAdminAuth = requireAdminAuth;
+exports.AUTH_COOKIE_NAME = exports.requireAdminAuth = exports.loginLimiter = void 0;
+exports.hashPassword = hashPassword;
+exports.comparePassword = comparePassword;
+exports.generateToken = generateToken;
+exports.verifyToken = verifyToken;
+exports.requireAuth = requireAuth;
+exports.requireRole = requireRole;
+exports.requireTenantAccess = requireTenantAccess;
 const crypto_1 = require("crypto");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const config_1 = require("../config");
-/**
- * FIX (critical): /agency, /onboard, /restaurant/:slug, /api/agency/*,
- * /api/restaurant/:slug/export previously had ZERO authentication. Any
- * tenant's full customer list (names + phone numbers) and the ability to
- * create arbitrary new tenants was reachable by anyone who guessed a URL.
- *
- * This middleware fails CLOSED: if ADMIN_BASIC_AUTH_USER/PASS are not
- * configured, every protected route returns 503 rather than falling open.
- * Uses HTTP Basic Auth with constant-time comparison to avoid timing attacks.
- *
- * For a production agency product this should be swapped for real
- * per-tenant session auth, but this closes the immediate data-exposure hole.
- */
+const connection_1 = require("../db/connection");
+const schema_1 = require("../db/schema");
+const drizzle_orm_1 = require("drizzle-orm");
+const AUTH_COOKIE_NAME = 'auth_token';
+exports.AUTH_COOKIE_NAME = AUTH_COOKIE_NAME;
+// ----------------------------------------------------
+// Rate Limiter for Login Endpoint (Prevent Brute Force)
+// ----------------------------------------------------
+exports.loginLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // Limit each IP to 5 failed login attempts per window
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        error: 'Too many login attempts from this IP, please try again after 15 minutes.',
+    },
+    handler: (req, res) => {
+        const isApiRequest = req.path.startsWith('/api/') || req.xhr || (req.headers.accept && req.headers.accept.includes('application/json'));
+        if (isApiRequest) {
+            res.status(429).json({ error: 'Too many login attempts from this IP, please try again after 15 minutes.' });
+        }
+        else {
+            res.status(429).send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <title>Too Many Attempts | House of Bhaves</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+          <style>
+            body { background: #0D0C0B; color: #F3EFE6; font-family: 'Instrument Sans', sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+            .card { background: #171614; border: 1px solid #2D2923; padding: 40px; border-radius: 16px; text-align: center; max-width: 420px; }
+            h2 { color: #EF4444; margin-bottom: 12px; font-size: 22px; }
+            p { color: #A8A29E; font-size: 14px; line-height: 1.6; }
+            a { display: inline-block; margin-top: 20px; color: #F59E0B; text-decoration: none; font-weight: 600; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <h2>⚠️ Too Many Login Attempts</h2>
+            <p>You have exceeded the maximum allowed login attempts. Please wait 15 minutes before trying again.</p>
+            <a href="/login">← Return to Login</a>
+          </div>
+        </body>
+        </html>
+      `);
+        }
+    }
+});
+// ----------------------------------------------------
+// Cryptographic & Token Utilities
+// ----------------------------------------------------
+async function hashPassword(plainText) {
+    const salt = await bcryptjs_1.default.genSalt(10);
+    return bcryptjs_1.default.hash(plainText, salt);
+}
+async function comparePassword(plainText, hash) {
+    return bcryptjs_1.default.compare(plainText, hash);
+}
+function generateToken(user) {
+    return jsonwebtoken_1.default.sign({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        clientId: user.clientId ?? null,
+    }, config_1.config.jwtSecret, { expiresIn: '7d' });
+}
+function verifyToken(token) {
+    try {
+        const decoded = jsonwebtoken_1.default.verify(token, config_1.config.jwtSecret);
+        if (!decoded || !decoded.id || !decoded.email || !decoded.role) {
+            return null;
+        }
+        return {
+            id: decoded.id,
+            email: decoded.email,
+            role: decoded.role,
+            clientId: decoded.clientId ?? null,
+        };
+    }
+    catch {
+        return null;
+    }
+}
 function timingSafeEqual(a, b) {
     const bufA = Buffer.from(a);
     const bufB = Buffer.from(b);
     if (bufA.length !== bufB.length) {
-        // still run a comparison of equal length to avoid leaking length via timing
         (0, crypto_1.timingSafeEqual)(bufA, bufA);
         return false;
     }
     return (0, crypto_1.timingSafeEqual)(bufA, bufB);
 }
-function requireAdminAuth(req, res, next) {
+/**
+ * Check for deprecated HTTP Basic Auth header.
+ * Logs a warning if used, allowing a grace period before complete removal.
+ */
+function checkBasicAuthFallback(req) {
     const { adminBasicAuthUser, adminBasicAuthPass } = config_1.config;
-    if (!adminBasicAuthUser || !adminBasicAuthPass) {
-        console.error('❌ [AUTH] Admin route blocked: ADMIN_BASIC_AUTH_USER/PASS not configured.');
-        res.status(503).send('Admin access is not configured on this server.');
-        return;
-    }
+    if (!adminBasicAuthUser || !adminBasicAuthPass)
+        return null;
     const header = req.headers.authorization || '';
     const [scheme, encoded] = header.split(' ');
-    if (scheme !== 'Basic' || !encoded) {
-        res.set('WWW-Authenticate', 'Basic realm="HOB Admin"');
-        res.status(401).send('Authentication required.');
-        return;
-    }
-    let decoded;
+    if (scheme !== 'Basic' || !encoded)
+        return null;
     try {
-        decoded = Buffer.from(encoded, 'base64').toString('utf8');
+        const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+        const sepIdx = decoded.indexOf(':');
+        if (sepIdx === -1)
+            return null;
+        const user = decoded.slice(0, sepIdx);
+        const pass = decoded.slice(sepIdx + 1);
+        if (timingSafeEqual(user, adminBasicAuthUser) && timingSafeEqual(pass, adminBasicAuthPass)) {
+            console.warn(`⚠️ [DEPRECATION WARNING] HTTP Basic Auth used on ${req.method} ${req.originalUrl || req.url}. ` +
+                `This fallback is deprecated and will be removed in the next release. Migrate to /login session/JWT cookies.`);
+            return {
+                id: 0,
+                email: 'legacy-basic-admin@houseofbhaves.com',
+                role: 'agency_admin',
+                clientId: null,
+            };
+        }
     }
     catch {
-        res.status(401).send('Malformed credentials.');
+        return null;
+    }
+    return null;
+}
+// ----------------------------------------------------
+// Authentication Middleware
+// ----------------------------------------------------
+/**
+ * Ensures the request is authenticated via JWT in httpOnly cookie,
+ * Bearer header, or deprecated HTTP Basic Auth fallback.
+ */
+function requireAuth(req, res, next) {
+    // 1. Check httpOnly cookie
+    let token = req.cookies?.[AUTH_COOKIE_NAME];
+    // 2. Check Authorization Bearer header
+    if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+        token = req.headers.authorization.slice(7).trim();
+    }
+    if (token) {
+        const user = verifyToken(token);
+        if (user) {
+            req.user = user;
+            return next();
+        }
+    }
+    // 3. Check deprecated HTTP Basic Auth fallback
+    const basicUser = checkBasicAuthFallback(req);
+    if (basicUser) {
+        req.user = basicUser;
+        return next();
+    }
+    // 4. Handle Unauthenticated Requests
+    const isApiRequest = req.path.startsWith('/api/') || req.xhr || (req.headers.accept && req.headers.accept.includes('application/json'));
+    if (isApiRequest) {
+        res.status(401).json({ error: 'Authentication required' });
         return;
     }
-    const sepIdx = decoded.indexOf(':');
-    if (sepIdx === -1) {
-        res.status(401).send('Malformed credentials.');
-        return;
-    }
-    const user = decoded.slice(0, sepIdx);
-    const pass = decoded.slice(sepIdx + 1);
-    const userOk = timingSafeEqual(user, adminBasicAuthUser);
-    const passOk = timingSafeEqual(pass, adminBasicAuthPass);
-    if (!userOk || !passOk) {
-        res.set('WWW-Authenticate', 'Basic realm="HOB Admin"');
-        res.status(401).send('Invalid credentials.');
-        return;
-    }
-    next();
+    // Redirect browser GET requests to /login
+    const returnUrl = encodeURIComponent(req.originalUrl || req.url);
+    res.redirect(`/login?redirect=${returnUrl}`);
+}
+/**
+ * Backward compatibility alias for requireAuth
+ */
+exports.requireAdminAuth = requireAuth;
+/**
+ * Role-Based Access Control Middleware
+ * Restricts access to users with specified role(s).
+ */
+function requireRole(allowedRoles) {
+    return (req, res, next) => {
+        if (!req.user) {
+            return requireAuth(req, res, () => {
+                if (!req.user || !allowedRoles.includes(req.user.role)) {
+                    const isApi = req.path.startsWith('/api/') || req.xhr;
+                    if (isApi) {
+                        res.status(403).json({ error: 'Forbidden: Insufficient privileges.' });
+                    }
+                    else {
+                        res.status(403).send('Forbidden: Insufficient privileges.');
+                    }
+                    return;
+                }
+                next();
+            });
+        }
+        if (!allowedRoles.includes(req.user.role)) {
+            const isApiRequest = req.path.startsWith('/api/') || req.xhr;
+            if (isApiRequest) {
+                res.status(403).json({ error: 'Forbidden: Insufficient privileges.' });
+            }
+            else {
+                res.status(403).send('Forbidden: Insufficient privileges.');
+            }
+            return;
+        }
+        next();
+    };
+}
+/**
+ * Multi-Tenant Access Control Middleware
+ * - agency_admin can access any restaurant/tenant.
+ * - client_owner can ONLY access the restaurant/tenant associated with their clientId.
+ */
+function requireTenantAccess(slugParam = 'slug') {
+    return async (req, res, next) => {
+        if (!req.user) {
+            return requireAuth(req, res, () => {
+                requireTenantAccess(slugParam)(req, res, next);
+            });
+        }
+        // Agency admin has unrestricted access to all tenants
+        if (req.user.role === 'agency_admin') {
+            return next();
+        }
+        // Client owners must have an assigned clientId
+        if (!req.user.clientId) {
+            const isApi = req.path.startsWith('/api/') || req.xhr;
+            if (isApi) {
+                res.status(403).json({ error: 'Forbidden: No client tenant assigned to this account.' });
+            }
+            else {
+                res.status(403).send('Forbidden: No client tenant assigned to this account.');
+            }
+            return;
+        }
+        const rawSlug = req.params[slugParam];
+        const targetSlug = Array.isArray(rawSlug) ? rawSlug[0] : (rawSlug || '');
+        if (!targetSlug) {
+            return next();
+        }
+        try {
+            // Find client with this slug
+            const client = await connection_1.db.select().from(schema_1.clients).where((0, drizzle_orm_1.eq)(schema_1.clients.slug, targetSlug)).get();
+            if (client) {
+                if (client.id === req.user.clientId) {
+                    return next();
+                }
+                else {
+                    const isApi = req.path.startsWith('/api/') || req.xhr;
+                    if (isApi) {
+                        res.status(403).json({ error: 'Forbidden: You do not have access to this tenant.' });
+                    }
+                    else {
+                        res.status(403).send('Forbidden: You do not have permission to view this restaurant.');
+                    }
+                    return;
+                }
+            }
+            // Check legacy restaurants table
+            const rest = await connection_1.db.select().from(schema_1.restaurants).where((0, drizzle_orm_1.eq)(schema_1.restaurants.slug, targetSlug)).get();
+            if (rest) {
+                // If the legacy restaurant ID matches clientId or client slug matches
+                if (rest.id === req.user.clientId) {
+                    return next();
+                }
+            }
+            // If tenant not found or mismatched
+            const isApi = req.path.startsWith('/api/') || req.xhr;
+            if (isApi) {
+                res.status(403).json({ error: 'Forbidden: You do not have permission to view this restaurant.' });
+            }
+            else {
+                res.status(403).send('Forbidden: You do not have permission to view this restaurant.');
+            }
+        }
+        catch (err) {
+            console.error('Tenant access check error:', err);
+            res.status(500).send('Internal Server Error during authorization');
+        }
+    };
 }
 //# sourceMappingURL=auth.js.map
