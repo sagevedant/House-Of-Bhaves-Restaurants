@@ -97,6 +97,43 @@ export async function seedDatabase() {
         customMenuText: smizeTreatments,
       }).where(eq(restaurants.id, existingSmizeRest.id));
     }
+
+    // ----------------------------------------------------
+    // SEED AUTH USERS (agency_admin & client_owner)
+    // ----------------------------------------------------
+    const { users } = await import('./schema');
+    const { hashPassword } = await import('../middleware/auth');
+
+    // 1. Seed Agency Admin User
+    const adminEmail = 'admin@houseofbhaves.com';
+    const existingAdmin = await db.select().from(users).where(eq(users.email, adminEmail)).get();
+    if (!existingAdmin) {
+      const adminHash = await hashPassword('AdminPass123!');
+      await db.insert(users).values({
+        email: adminEmail,
+        passwordHash: adminHash,
+        role: 'agency_admin',
+        clientId: null,
+      });
+      console.log('✅ Seed: Inserted default agency admin user (admin@houseofbhaves.com).');
+    }
+
+    // 2. Seed Smize Dental Client Owner User
+    const smizeClientRecord = await db.select().from(clients).where(eq(clients.slug, 'smize-dental')).get();
+    if (smizeClientRecord) {
+      const smizeEmail = 'owner@smizedental.com';
+      const existingSmizeUser = await db.select().from(users).where(eq(users.email, smizeEmail)).get();
+      if (!existingSmizeUser) {
+        const smizeHash = await hashPassword('SmizePass123!');
+        await db.insert(users).values({
+          email: smizeEmail,
+          passwordHash: smizeHash,
+          role: 'client_owner',
+          clientId: smizeClientRecord.id,
+        });
+        console.log('✅ Seed: Inserted client owner user for Smize Dental (owner@smizedental.com).');
+      }
+    }
   } catch (error) {
     console.error('❌ Seed error:', error);
   }
@@ -105,3 +142,4 @@ export async function seedDatabase() {
 if (require.main === module) {
   initializeDatabase().then(() => seedDatabase());
 }
+

@@ -145,9 +145,23 @@ export async function initializeDatabase() {
     )
   `);
 
+  await sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'client_owner',
+      client_id INTEGER REFERENCES clients(id),
+      created_at TEXT,
+      updated_at TEXT
+    )
+  `);
+
   await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_conversations_phone_restaurant ON conversations(phone, restaurant_id)`);
   await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_reservations_stage ON reservations(stage)`);
   await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_reservations_date ON reservations(date)`);
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_users_client_id ON users(client_id)`);
 
   // Safe Migration Alter Helpers
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN billing_cycle TEXT DEFAULT 'monthly';`); } catch {}
@@ -158,8 +172,21 @@ export async function initializeDatabase() {
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN custom_menu_text TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN opening_hours_lunch TEXT DEFAULT '';`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN opening_hours_dinner TEXT DEFAULT '19:00-00:30';`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN waba_id TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN meta_business_id TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN system_user_id TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN embedded_signup_completed_at TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN token_expires_at TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN onboarding_status TEXT DEFAULT 'legacy';`); } catch {}
+
   try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN custom_welcome_text TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN custom_menu_text TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN waba_id TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN meta_business_id TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN embedded_signup_completed_at TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN token_expires_at TEXT;`); } catch {}
+  try { await sqlite.execute(`ALTER TABLE restaurants ADD COLUMN onboarding_status TEXT DEFAULT 'legacy';`); } catch {}
+
   try { await sqlite.execute(`ALTER TABLE customers ADD COLUMN last_inbound_interaction TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE bookings ADD COLUMN review_scheduled_at TEXT;`); } catch {}
 

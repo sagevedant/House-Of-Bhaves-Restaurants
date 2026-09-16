@@ -12,8 +12,14 @@ export const clients = sqliteTable('clients', {
   outboundAllowanceMonthly: integer('outbound_allowance_monthly').default(1000),
   outboundSentThisMonth: integer('outbound_sent_this_month').default(0),
   nextMonthlyResetDate: text('next_monthly_reset_date'), // YYYY-MM-DD
+  wabaId: text('waba_id'), // Meta WhatsApp Business Account ID (owned by client in Tech Provider model)
   whatsappPhoneNumberId: text('whatsapp_phone_number_id').notNull(),
   metaAccessToken: text('meta_access_token').notNull(),
+  metaBusinessId: text('meta_business_id'), // Client's Meta Business Manager Portfolio ID
+  systemUserId: text('system_user_id'), // Delegated System User ID under client's WABA
+  embeddedSignupCompletedAt: text('embedded_signup_completed_at'), // ISO string timestamp
+  tokenExpiresAt: text('token_expires_at'), // ISO string timestamp for token expiry tracking
+  onboardingStatus: text('onboarding_status', { enum: ['pending', 'connected', 'legacy', 'failed'] }).default('legacy'),
   prefix: text('prefix').notNull().default('HOB'),
   googleReviewUrl: text('google_review_url').default('https://maps.google.com'),
   customWelcomeText: text('custom_welcome_text'),
@@ -73,8 +79,13 @@ export const restaurants = sqliteTable('restaurants', {
   name: text('name').notNull(),
   slug: text('slug').notNull().default('hob-restaurant'),
   address: text('address').notNull(),
+  wabaId: text('waba_id'), // Meta WABA ID
   whatsappPhoneNumberId: text('whatsapp_phone_number_id').notNull(),
   metaAccessToken: text('meta_access_token').notNull(),
+  metaBusinessId: text('meta_business_id'),
+  embeddedSignupCompletedAt: text('embedded_signup_completed_at'),
+  tokenExpiresAt: text('token_expires_at'),
+  onboardingStatus: text('onboarding_status', { enum: ['pending', 'connected', 'legacy', 'failed'] }).default('legacy'),
   prefix: text('prefix').notNull(),
   managerPhone: text('manager_phone'),
   openingHoursLunch: text('opening_hours_lunch').default('12:00-15:30'),
@@ -127,6 +138,23 @@ export const reservations = sqliteTable('reservations', {
   idxReservationsDate: index('idx_reservations_date').on(table.date),
 }));
 
+// ----------------------------------------------------
+// AUTHENTICATION & MULTI-TENANT USERS
+// ----------------------------------------------------
+
+export const users = sqliteTable('users', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  email: text('email').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  role: text('role', { enum: ['agency_admin', 'client_owner'] }).notNull().default('client_owner'),
+  clientId: integer('client_id').references(() => clients.id),
+  createdAt: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').$defaultFn(() => new Date().toISOString()),
+}, (table) => ({
+  idxUsersEmail: index('idx_users_email').on(table.email),
+  idxUsersClientId: index('idx_users_client_id').on(table.clientId),
+}));
+
 export type Client = typeof clients.$inferSelect;
 export type InsertClient = typeof clients.$inferInsert;
 
@@ -145,6 +173,9 @@ export type InsertConversation = typeof conversations.$inferInsert;
 export type Reservation = typeof reservations.$inferSelect;
 export type InsertReservation = typeof reservations.$inferInsert;
 
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
+
 export interface StepData {
   guests?: number;
   occasion?: 'casual' | 'birthday' | 'anniversary' | 'corporate' | 'party';
@@ -155,3 +186,4 @@ export interface StepData {
   specialRequest?: string;
   customerName?: string;
 }
+

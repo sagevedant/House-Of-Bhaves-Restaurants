@@ -1,18 +1,35 @@
 import 'dotenv/config';
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import { config } from './config';
 import { db, initializeDatabase } from './db/connection';
-import { restaurants, reservations, conversations, clients, customers, bookings } from './db/schema';
+import { restaurants, reservations, conversations, clients, customers, bookings, users } from './db/schema';
 import webhookRouter from './whatsapp/webhook';
 import { sendToMakeWebhook } from './services/makeIntegration';
 import { eq, desc, and } from 'drizzle-orm';
 import { startScheduler } from './scheduler/cron';
 import { processPendingReviewQueue, scheduleSameDayReview } from './services/reviewEngine';
-import { requireAdminAuth } from './middleware/auth';
+import { 
+  requireAuth, 
+  requireRole, 
+  requireTenantAccess, 
+  loginLimiter, 
+  comparePassword, 
+  generateToken, 
+  AUTH_COOKIE_NAME 
+} from './middleware/auth';
 import { escapeHtml, escapeCsvField } from './utils/escape';
 import { generateReservationCode } from './utils/reservationCode';
+import { 
+  exchangeCodeForAccessToken, 
+  debugToken, 
+  subscribeAppToWaba, 
+  getWabaPhoneNumbers 
+} from './services/metaEmbeddedSignup';
 
 const app = express();
+
+app.use(cookieParser());
 
 // FIX (critical): capture the raw request body on the webhook route so
 // webhook.ts can verify Meta's X-Hub-Signature-256 HMAC. Only the /webhook
@@ -47,6 +64,264 @@ app.get('/privacy', (req, res) => {
   `);
 });
 
+// ----------------------------------------------------
+// 🔐 AUTHENTICATION: LOGIN & LOGOUT ROUTES
+// ----------------------------------------------------
+
+app.get('/login', (req, res) => {
+  const redirect = req.query.redirect ? String(req.query.redirect) : '';
+  const errorMsg = req.query.error ? String(req.query.error) : '';
+  
+  res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In | House of Bhaves Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Instrument Sans', -apple-system, sans-serif;
+      background: #0B0A09;
+      color: #F3EFE6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      background-image: radial-gradient(circle at 50% 0%, #26211A 0%, #0B0A09 70%);
+      position: relative;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noiseFilter"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.045"/></svg>');
+      pointer-events: none;
+      z-index: 999;
+    }
+    .login-card {
+      width: 100%;
+      max-width: 440px;
+      background: #141311;
+      border: 1.5px solid #2D2923;
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.06);
+      position: relative;
+      z-index: 10;
+    }
+    .brand-pill {
+      display: inline-block;
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: #F59E0B;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 5px 12px;
+      border-radius: 30px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 18px;
+    }
+    .login-header h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 26px;
+      color: #F3EFE6;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .login-header p {
+      color: #A8A29E;
+      font-size: 13.5px;
+      margin-top: 6px;
+      font-weight: 500;
+      line-height: 1.4;
+    }
+    .error-alert {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid #EF4444;
+      color: #FCA5A5;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      margin: 20px 0 6px 0;
+    }
+    form { margin-top: 24px; }
+    .form-group { margin-bottom: 20px; }
+    label {
+      display: block;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #D6D3D1;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    input {
+      width: 100%;
+      background: #0E0D0C;
+      border: 1.5px solid #2D2923;
+      color: #F3EFE6;
+      padding: 14px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-family: inherit;
+      transition: all 0.2s ease;
+    }
+    input:focus {
+      border-color: #F59E0B;
+      outline: none;
+      background: #12110F;
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.18);
+    }
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+      border: none;
+      color: #0D0C0B;
+      padding: 16px;
+      border-radius: 14px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 10px;
+      box-shadow: 0 6px 20px rgba(245, 158, 11, 0.25);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(245, 158, 11, 0.35);
+    }
+    .login-footer {
+      margin-top: 24px;
+      border-top: 1px solid #22201D;
+      padding-top: 18px;
+      font-size: 12px;
+      color: #78716C;
+      text-align: center;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="brand-pill">House of Bhaves</div>
+    <div class="login-header">
+      <h1>Portal Sign In</h1>
+      <p>Enter your agency admin or restaurant client credentials to continue.</p>
+    </div>
+
+    ${errorMsg ? `<div class="error-alert">⚠️ ${escapeHtml(errorMsg)}</div>` : ''}
+
+    <form action="/login" method="POST">
+      <input type="hidden" name="redirect" value="${escapeHtml(redirect)}">
+      
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" name="email" placeholder="name@domain.com" required autofocus autocomplete="email">
+      </div>
+
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" name="password" placeholder="••••••••" required autocomplete="current-password">
+      </div>
+
+      <button type="submit" class="btn-submit">Sign In to Dashboard →</button>
+    </form>
+
+    <div class="login-footer">
+      Protected with rate-limited brute-force shield & secure httpOnly session cookies.
+    </div>
+  </div>
+</body>
+</html>
+  `);
+});
+
+app.post('/login', loginLimiter, async (req, res) => {
+  try {
+    const { email, password, redirect } = req.body;
+
+    if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
+      const returnUrl = encodeURIComponent(redirect || '');
+      return res.redirect(`/login?error=${encodeURIComponent('Please provide both email and password.')}&redirect=${returnUrl}`);
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 1. Look up user by email in database
+    const user = await db.select().from(users).where(eq(users.email, cleanEmail)).get();
+    
+    if (!user) {
+      const returnUrl = encodeURIComponent(redirect || '');
+      return res.redirect(`/login?error=${encodeURIComponent('Invalid email or password.')}&redirect=${returnUrl}`);
+    }
+
+    // 2. Verify hashed password
+    const valid = await comparePassword(password, user.passwordHash);
+    if (!valid) {
+      const returnUrl = encodeURIComponent(redirect || '');
+      return res.redirect(`/login?error=${encodeURIComponent('Invalid email or password.')}&redirect=${returnUrl}`);
+    }
+
+    // 3. Generate JWT token
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      role: user.role as 'agency_admin' | 'client_owner',
+      clientId: user.clientId ?? null,
+    });
+
+    // 4. Set httpOnly cookie
+    res.cookie(AUTH_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    // 5. Determine redirection target
+    if (redirect && typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) {
+      return res.redirect(redirect);
+    }
+
+    if (user.role === 'agency_admin') {
+      return res.redirect('/agency');
+    }
+
+    if (user.role === 'client_owner' && user.clientId) {
+      // Find client slug
+      const client = await db.select().from(clients).where(eq(clients.id, user.clientId)).get();
+      if (client?.slug) {
+        return res.redirect(`/restaurant/${encodeURIComponent(client.slug)}`);
+      }
+      const rest = await db.select().from(restaurants).where(eq(restaurants.id, user.clientId)).get();
+      if (rest?.slug) {
+        return res.redirect(`/restaurant/${encodeURIComponent(rest.slug)}`);
+      }
+    }
+
+    res.redirect('/agency');
+  } catch (err) {
+    console.error('Login error:', err);
+    res.redirect(`/login?error=${encodeURIComponent('An unexpected error occurred during login.')}`);
+  }
+});
+
+app.all('/logout', (req, res) => {
+  res.clearCookie(AUTH_COOKIE_NAME);
+  res.redirect('/login');
+});
+
 app.get('/terms', (req, res) => {
   res.send(`
     <!DOCTYPE html><html><head><title>Terms of Service - House of Bhaves (HOB)</title><style>body{font-family:sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:0 auto;color:#222;}</style></head>
@@ -63,8 +338,8 @@ app.get('/deletion', (req, res) => {
 
 // FIX (critical): this route previously dumped full customer PII (names,
 // phone numbers) as CSV to anyone who guessed the slug, with no auth and
-// no CSV-injection escaping. Now requires admin auth + escapes every field.
-app.get('/api/restaurant/:slug/export', requireAdminAuth, async (req, res) => {
+// no CSV-injection escaping. Now requires tenant-scoped auth + escapes every field.
+app.get('/api/restaurant/:slug/export', requireTenantAccess('slug'), async (req, res) => {
   try {
     const rawSlug = req.params.slug;
     const slug = Array.isArray(rawSlug) ? rawSlug[0] : (rawSlug || '');
@@ -144,7 +419,7 @@ app.get('/api/restaurant/:slug/export', requireAdminAuth, async (req, res) => {
 });
 
 // Demo reservation creation endpoint — auth-gated, no hardcoded customer PII
-app.post('/api/reservations/demo', requireAdminAuth, async (req, res) => {
+app.post('/api/reservations/demo', requireAuth, async (req, res) => {
   try {
     const code = await generateReservationCode('DEMO');
     
@@ -189,7 +464,7 @@ app.post('/api/reservations/demo', requireAdminAuth, async (req, res) => {
 });
 
 // Status update endpoint — auth-gated (was previously open to anyone)
-app.post('/api/reservations/status', requireAdminAuth, async (req, res) => {
+app.post('/api/reservations/status', requireAuth, async (req, res) => {
   try {
     const { reservationId, status } = req.body;
     const ALLOWED_STATUSES = ['booked', 'seated', 'completed', 'no_show', 'cancelled'];
@@ -248,26 +523,26 @@ app.post('/api/reservations/status', requireAdminAuth, async (req, res) => {
   }
 });
 
-// Agency Control API Endpoint (Same-Day Review Queue Trigger) — auth-gated
-app.post('/api/agency/trigger-review-queue', requireAdminAuth, async (req, res) => {
+// Agency Control API Endpoint (Same-Day Review Queue Trigger) — auth-gated to agency_admin
+app.post('/api/agency/trigger-review-queue', requireRole(['agency_admin']), async (req, res) => {
   const result = await processPendingReviewQueue();
   res.json(result);
 });
 
 // ----------------------------------------------------
-// 📝 LUXURY GRAINY-TEXTURED ONBOARDING PORTAL (GET /onboard)
+// 📝 LUXURY META TECH PROVIDER ONBOARDING PORTAL (GET /onboard)
 // ----------------------------------------------------
-// FIX (critical): onboarding form was previously public — anyone could view
-// AND submit it, creating arbitrary tenants with attacker-supplied Meta
-// credentials. Now auth-gated end to end.
-app.get('/onboard', requireAdminAuth, (req, res) => {
+app.get('/onboard', requireRole(['agency_admin']), (req, res) => {
+  const metaAppId = config.metaAppId;
+  const configId = config.metaEmbeddedSignupConfigId;
+
   res.send(`
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Onboard Restaurant Client | House of Bhaves Agency</title>
+  <title>Meta Embedded Signup Onboarding | House of Bhaves Agency</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -277,7 +552,7 @@ app.get('/onboard', requireAdminAuth, (req, res) => {
       font-family: 'Instrument Sans', -apple-system, sans-serif;
       background: #0B0A09;
       color: #F3EFE6;
-      padding: 48px 20px;
+      padding: 40px 20px;
       min-height: 100vh;
       background-image: radial-gradient(circle at 50% 0%, #26211A 0%, #0B0A09 70%);
       position: relative;
@@ -291,12 +566,12 @@ app.get('/onboard', requireAdminAuth, (req, res) => {
       z-index: 999;
     }
     .form-container {
-      max-width: 720px;
+      max-width: 760px;
       margin: 0 auto;
       background: #141311;
       border: 1.5px solid #2D2923;
       border-radius: 24px;
-      padding: 44px;
+      padding: 40px;
       box-shadow: 0 20px 50px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05);
     }
     .brand-pill {
@@ -313,23 +588,83 @@ app.get('/onboard', requireAdminAuth, (req, res) => {
       letter-spacing: 1px;
       margin-bottom: 16px;
     }
-    .form-header { text-align: center; margin-bottom: 32px; }
+    .form-header { text-align: center; margin-bottom: 28px; }
     .form-header h1 {
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 28px;
+      font-size: 26px;
       color: #F3EFE6;
       font-weight: 700;
       letter-spacing: -0.5px;
     }
-    .form-header p { color: #A8A29E; font-size: 14px; margin-top: 8px; font-weight: 500; }
-    .form-group { margin-bottom: 22px; }
+    .form-header p { color: #A8A29E; font-size: 13px; margin-top: 6px; font-weight: 500; }
+
+    .tech-provider-notice {
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin-bottom: 26px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .notice-icon { font-size: 24px; line-height: 1; }
+    .notice-title { font-size: 13px; font-weight: 700; color: #60A5FA; font-family: 'Space Grotesk', sans-serif; }
+    .notice-body { font-size: 12px; color: #94A3B8; margin-top: 3px; line-height: 1.4; }
+
+    .meta-signup-card {
+      background: #191816;
+      border: 1.5px solid #3E3932;
+      border-radius: 18px;
+      padding: 24px;
+      margin-bottom: 26px;
+      text-align: center;
+    }
+    .meta-signup-card.connected {
+      border-color: #22C55E;
+      background: rgba(34, 197, 94, 0.06);
+    }
+    .meta-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: #1877F2;
+      color: #FFF;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      padding: 14px 28px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 14px rgba(24, 119, 242, 0.35);
+    }
+    .meta-btn:hover { background: #166FE5; transform: translateY(-1px); }
+    .meta-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .status-badge {
+      display: inline-block;
+      margin-top: 14px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .status-pending { background: #282522; color: #A8A29E; }
+    .status-success { background: rgba(34, 197, 94, 0.2); color: #4ADE80; border: 1px solid #22C55E; }
+    .status-error { background: rgba(239, 68, 68, 0.2); color: #F87171; border: 1px solid #EF4444; }
+
+    .form-group { margin-bottom: 20px; }
     label {
       display: block;
       font-family: 'Space Grotesk', sans-serif;
       font-size: 12px;
       font-weight: 700;
       color: #D6D3D1;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       text-transform: uppercase;
       letter-spacing: 0.8px;
     }
@@ -338,58 +673,120 @@ app.get('/onboard', requireAdminAuth, (req, res) => {
       background: #0E0D0C;
       border: 1.5px solid #2D2923;
       color: #F3EFE6;
-      padding: 14px 18px;
+      padding: 12px 16px;
       border-radius: 12px;
       font-size: 14px;
       font-family: inherit;
       transition: all 0.2s ease;
     }
-    textarea { height: 95px; resize: vertical; line-height: 1.5; }
+    textarea { height: 85px; resize: vertical; line-height: 1.5; }
     input:focus, select:focus, textarea:focus { border-color: #F59E0B; outline: none; background: #12110F; box-shadow: 0 0 15px rgba(245, 158, 11, 0.15); }
-    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    
     .submit-btn {
       width: 100%;
       background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
       border: none;
       color: #0D0C0B;
-      padding: 18px;
+      padding: 16px;
       border-radius: 14px;
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 700;
       cursor: pointer;
-      margin-top: 14px;
+      margin-top: 10px;
       box-shadow: 0 6px 20px rgba(245, 158, 11, 0.25);
       transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
     .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(245, 158, 11, 0.35); }
-    .note { font-size: 11px; color: #78716C; margin-top: 6px; }
+    .note { font-size: 11px; color: #78716C; margin-top: 4px; }
+    
+    .meta-details-preview {
+      margin-top: 14px;
+      background: #11100E;
+      border: 1px solid #2D2923;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 12px;
+      font-family: monospace;
+      color: #D6D3D1;
+      text-align: left;
+      display: none;
+    }
+
+    .legacy-toggle {
+      margin-top: 24px;
+      text-align: center;
+      font-size: 12px;
+      color: #78716C;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .legacy-section { display: none; margin-top: 20px; padding-top: 20px; border-top: 1px dashed #2D2923; }
   </style>
 </head>
 <body>
   <div class="form-container">
     <div class="form-header">
-      <div class="brand-pill">House of Bhaves Agency</div>
+      <div class="brand-pill">House of Bhaves Tech Provider</div>
       <h1>🍽️ Onboard Restaurant Client</h1>
-      <p>Configure Custom Greetings, Operating Hours, Cuisines & Seating Setup</p>
+      <p>Meta Embedded Signup • Client-Owned WABA Delegation • Zero Agency Quota Limit</p>
     </div>
 
-    <form action="/api/agency/onboard" method="POST">
+    <div class="tech-provider-notice">
+      <div class="notice-icon">🛡️</div>
+      <div>
+        <div class="notice-title">Meta Tech Provider Architecture</div>
+        <div class="notice-body">
+          Client WABAs reside inside the <strong>client's own Meta Business Portfolio</strong>. Our Agency receives delegated System User access and webhook subscriptions without consuming our agency 20-WABA quota.
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 1: Meta Hosted Embedded Signup -->
+    <div class="meta-signup-card" id="metaCard">
+      <h3 style="font-family: 'Space Grotesk', sans-serif; font-size: 16px; margin-bottom: 8px;">Step 1: Connect Client WhatsApp via Meta</h3>
+      <p style="font-size: 12px; color: #A8A29E; margin-bottom: 16px;">
+        Launches Meta's hosted popup for business verification, WABA creation, and phone number registration.
+      </p>
+
+      <button type="button" class="meta-btn" id="launchFbSignupBtn" onclick="launchEmbeddedSignup()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+        Connect WhatsApp with Meta
+      </button>
+
+      <div id="metaStatus" class="status-badge status-pending">Awaiting Meta authorization...</div>
+
+      <div id="metaDetailsPreview" class="meta-details-preview">
+        <div><strong>WABA ID:</strong> <span id="previewWabaId">-</span></div>
+        <div><strong>Phone Number ID:</strong> <span id="previewPhoneId">-</span></div>
+        <div><strong>OAuth Code:</strong> <span id="previewAuthCode">-</span></div>
+      </div>
+    </div>
+
+    <!-- Step 2: Restaurant Profile & Automation Configuration -->
+    <form id="onboardForm" onsubmit="handleOnboardSubmit(event)">
+      <input type="hidden" id="oauthCode" name="oauthCode" value="">
+      <input type="hidden" id="wabaId" name="wabaId" value="">
+      <input type="hidden" id="phoneNumberId" name="phoneNumberId" value="">
+
+      <h3 style="font-family: 'Space Grotesk', sans-serif; font-size: 16px; margin-bottom: 16px; color: #F59E0B;">Step 2: Restaurant Profile & Automation Settings</h3>
+
       <div class="form-group">
         <label>Restaurant Business Name *</label>
-        <input type="text" name="businessName" placeholder="e.g. Big Bang Community (BBC)" required>
+        <input type="text" id="businessName" name="businessName" placeholder="e.g. Big Bang Community (BBC)" required>
       </div>
 
       <div class="row-2">
         <div class="form-group">
           <label>Custom URL Slug *</label>
-          <input type="text" name="slug" placeholder="e.g. big-bang-community" required>
-          <div class="note">Generates /restaurant/:slug logbook</div>
+          <input type="text" id="slug" name="slug" placeholder="e.g. big-bang-community" required>
+          <div class="note">Generates /restaurant/:slug live ledger</div>
         </div>
 
         <div class="form-group">
           <label>Commercial Billing Plan *</label>
-          <select name="billingCycle" required>
+          <select id="billingCycle" name="billingCycle" required>
             <option value="monthly">Monthly Automation Plan (₹9,999/mo)</option>
             <option value="quarterly" selected>Quarterly Automation Bundle (₹24,999/qtr)</option>
           </select>
@@ -399,79 +796,222 @@ app.get('/onboard', requireAdminAuth, (req, res) => {
       <div class="row-2">
         <div class="form-group">
           <label>Lunch Hours (Afternoon)</label>
-          <input type="text" name="openingHoursLunch" placeholder="e.g. 12:00-15:30 (leave blank if closed lunch)">
+          <input type="text" id="openingHoursLunch" name="openingHoursLunch" placeholder="e.g. 12:00-15:30">
         </div>
         <div class="form-group">
           <label>Dinner Hours (Evening)</label>
-          <input type="text" name="openingHoursDinner" placeholder="e.g. 19:00-00:30 (Evening post 7 PM)">
+          <input type="text" id="openingHoursDinner" name="openingHoursDinner" placeholder="e.g. 19:00-00:30">
         </div>
       </div>
 
       <div class="form-group">
         <label>Custom Bot Welcome Greeting (Optional)</label>
-        <textarea name="customWelcomeText" placeholder="e.g. Welcome to Big Bang Community (BBC)! Relaxed outdoor seating, live music & sports screenings. Tap below to book your table!"></textarea>
+        <textarea id="customWelcomeText" name="customWelcomeText" placeholder="e.g. Welcome to Big Bang Community (BBC)! Relaxed outdoor seating, live music & sports screenings. Tap below to book your table!"></textarea>
       </div>
 
       <div class="form-group">
         <label>Custom Cuisines & Chef Specials Guide (Optional)</label>
-        <textarea name="customMenuText" placeholder="e.g. 🥟 Dumplings & Dim Sums&#10;🍝 Homestyle Rice & Pastas&#10;🍗 Crispy Korean Chicken&#10;🍹 Cold Brew Shakerato & Craft Beers"></textarea>
+        <textarea id="customMenuText" name="customMenuText" placeholder="e.g. 🥟 Dumplings & Dim Sums&#10;🍝 Homestyle Rice & Pastas&#10;🍗 Crispy Korean Chicken&#10;🍹 Cold Brew Shakerato & Craft Beers"></textarea>
       </div>
 
       <div class="form-group">
         <label>Restaurant Address & Landmark</label>
-        <input type="text" name="address" placeholder="e.g. Royale Heritage Mall, NIBM Road, Pune">
+        <input type="text" id="address" name="address" placeholder="e.g. Royale Heritage Mall, NIBM Road, Pune">
       </div>
 
       <div class="row-2">
         <div class="form-group">
-          <label>Meta WhatsApp Phone Number ID (Optional)</label>
-          <input type="text" name="whatsappPhoneNumberId" placeholder="Leave blank to require manual setup">
+          <label>Reservation Code Prefix *</label>
+          <input type="text" id="prefix" name="prefix" placeholder="e.g. BBC" required>
         </div>
 
         <div class="form-group">
-          <label>Reservation Code Prefix *</label>
-          <input type="text" name="prefix" placeholder="e.g. BBC" required>
+          <label>Manager WhatsApp Phone</label>
+          <input type="text" id="managerPhone" name="managerPhone" placeholder="e.g. 919511673214">
         </div>
       </div>
 
       <div class="form-group">
-        <label>Meta Permanent Access Token (Optional)</label>
-        <input type="password" name="metaAccessToken" placeholder="Leave blank to require manual setup">
+        <label>Google Review URL</label>
+        <input type="text" id="googleReviewUrl" name="googleReviewUrl" placeholder="e.g. https://maps.google.com/?q=Big+Bang+Community">
       </div>
 
-      <div class="row-2">
-        <div class="form-group">
-          <label>Manager WhatsApp Phone</label>
-          <input type="text" name="managerPhone" placeholder="e.g. 919511673214">
-        </div>
-
-        <div class="form-group">
-          <label>Google Review URL</label>
-          <input type="text" name="googleReviewUrl" placeholder="e.g. https://maps.google.com/?q=Big+Bang+Community">
+      <!-- Optional Legacy/Manual Token Fallback for testing -->
+      <div class="legacy-toggle" onclick="toggleLegacySection()">🛠️ Toggle Developer / Manual Token Setup (Optional Fallback)</div>
+      
+      <div id="legacySection" class="legacy-section">
+        <div class="row-2">
+          <div class="form-group">
+            <label>Manual WhatsApp Phone Number ID</label>
+            <input type="text" id="manualPhoneId" name="manualPhoneId" placeholder="e.g. 1167895203082852">
+          </div>
+          <div class="form-group">
+            <label>Manual Permanent Access Token</label>
+            <input type="password" id="manualToken" name="manualToken" placeholder="EAAG...">
+          </div>
         </div>
       </div>
 
-      <button type="submit" class="submit-btn">✨ Save & Activate Restaurant Client</button>
+      <button type="submit" class="submit-btn" id="submitBtn">✨ Save & Activate Restaurant Client</button>
     </form>
   </div>
+
+  <!-- Meta JS SDK Integration -->
+  <script>
+    const META_APP_ID = ${JSON.stringify(metaAppId)};
+    const META_CONFIG_ID = ${JSON.stringify(configId)};
+
+    window.fbAsyncInit = function() {
+      if (META_APP_ID && typeof FB !== 'undefined') {
+        FB.init({
+          appId: META_APP_ID,
+          cookie: true,
+          xfbml: true,
+          version: 'v21.0'
+        });
+        console.log('✅ [Meta SDK] Initialized with App ID:', META_APP_ID);
+      }
+    };
+
+    (function(d, s, id){
+       var js, fjs = d.getElementsByTagName(s)[0];
+       if (d.getElementById(id)) {return;}
+       js = d.createElement(s); js.id = id;
+       js.src = "https://connect.facebook.net/en_US/sdk.js";
+       fjs.parentNode.insertBefore(js, fjs);
+     }(document, 'script', 'facebook-jssdk'));
+
+    // Listen for Meta Embedded Signup Session Events
+    window.addEventListener('message', function(event) {
+      if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') {
+        return;
+      }
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data && data.type === 'WA_EMBEDDED_SIGNUP') {
+          console.log('📩 [Meta Embedded Signup Event]:', data);
+          if (data.data) {
+            if (data.data.waba_id) {
+              document.getElementById('wabaId').value = data.data.waba_id;
+              document.getElementById('previewWabaId').innerText = data.data.waba_id;
+            }
+            if (data.data.phone_number_id) {
+              document.getElementById('phoneNumberId').value = data.data.phone_number_id;
+              document.getElementById('previewPhoneId').innerText = data.data.phone_number_id;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Non-JSON message from window:', err);
+      }
+    });
+
+    function launchEmbeddedSignup() {
+      if (typeof FB === 'undefined' || !META_APP_ID || !META_CONFIG_ID) {
+        alert('Meta Embedded Signup configuration (META_APP_ID / META_EMBEDDED_SIGNUP_CONFIG_ID) is not configured in .env. You can use the manual credentials section below or configure the app credentials.');
+        return;
+      }
+
+      document.getElementById('metaStatus').className = 'status-badge status-pending';
+      document.getElementById('metaStatus').innerText = 'Meta Login popup opened...';
+
+      FB.login(function(response) {
+        if (response.authResponse && response.authResponse.code) {
+          const authCode = response.authResponse.code;
+          document.getElementById('oauthCode').value = authCode;
+          document.getElementById('previewAuthCode').innerText = authCode.slice(0, 16) + '...';
+
+          document.getElementById('metaStatus').className = 'status-badge status-success';
+          document.getElementById('metaStatus').innerText = '✅ Meta WABA Authorized! Ready to save.';
+          document.getElementById('metaCard').classList.add('connected');
+          document.getElementById('metaDetailsPreview').style.display = 'block';
+        } else {
+          document.getElementById('metaStatus').className = 'status-badge status-error';
+          document.getElementById('metaStatus').innerText = '❌ Meta authorization was cancelled or failed.';
+        }
+      }, {
+        config_id: META_CONFIG_ID,
+        response_type: 'code',
+        override_default_response_type: true,
+        extras: {
+          feature: 'whatsapp_embedded_signup',
+          sessionInfoVersion: '2'
+        }
+      });
+    }
+
+    function toggleLegacySection() {
+      const sec = document.getElementById('legacySection');
+      sec.style.display = sec.style.display === 'block' ? 'none' : 'block';
+    }
+
+    async function handleOnboardSubmit(e) {
+      e.preventDefault();
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.innerText = '⏳ Connecting & Provisioning WABA...';
+
+      const payload = {
+        code: document.getElementById('oauthCode').value,
+        wabaId: document.getElementById('wabaId').value,
+        phoneNumberId: document.getElementById('phoneNumberId').value,
+        whatsappPhoneNumberId: document.getElementById('manualPhoneId')?.value,
+        metaAccessToken: document.getElementById('manualToken')?.value,
+        businessName: document.getElementById('businessName').value,
+        slug: document.getElementById('slug').value,
+        billingCycle: document.getElementById('billingCycle').value,
+        openingHoursLunch: document.getElementById('openingHoursLunch').value,
+        openingHoursDinner: document.getElementById('openingHoursDinner').value,
+        customWelcomeText: document.getElementById('customWelcomeText').value,
+        customMenuText: document.getElementById('customMenuText').value,
+        address: document.getElementById('address').value,
+        prefix: document.getElementById('prefix').value,
+        managerPhone: document.getElementById('managerPhone').value,
+        googleReviewUrl: document.getElementById('googleReviewUrl').value,
+      };
+
+      try {
+        const response = await fetch('/api/agency/embedded-signup/exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        if (response.ok && result.success) {
+          window.location.href = result.redirectUrl || '/agency?onboarded=' + result.slug;
+        } else {
+          alert('Onboarding failed: ' + (result.error || 'Check server logs.'));
+          submitBtn.disabled = false;
+          submitBtn.innerText = '✨ Save & Activate Restaurant Client';
+        }
+      } catch (err) {
+        alert('Network error during onboarding: ' + err.message);
+        submitBtn.disabled = false;
+        submitBtn.innerText = '✨ Save & Activate Restaurant Client';
+      }
+    }
+  </script>
 </body>
 </html>
   `);
 });
 
-// FIX (critical): was public with zero auth — anyone could create a tenant
-// pointed at arbitrary Meta credentials. Also removed the hardcoded
-// placeholder token/phone-ID fallbacks that silently let a client go live
-// with agency-wide shared credentials without anyone noticing.
-app.post('/api/agency/onboard', requireAdminAuth, async (req, res) => {
+// ----------------------------------------------------
+// 🔄 META EMBEDDED SIGNUP TOKEN EXCHANGE & PROVISIONING API
+// ----------------------------------------------------
+app.post('/api/agency/embedded-signup/exchange', requireRole(['agency_admin']), async (req, res) => {
   try {
     const {
+      code,
+      wabaId: providedWabaId,
+      phoneNumberId: providedPhoneId,
+      whatsappPhoneNumberId,
+      metaAccessToken,
       businessName,
       slug,
       billingCycle,
       address,
-      whatsappPhoneNumberId,
-      metaAccessToken,
       prefix,
       managerPhone,
       googleReviewUrl,
@@ -482,79 +1022,215 @@ app.post('/api/agency/onboard', requireAdminAuth, async (req, res) => {
     } = req.body;
 
     if (!businessName || !slug || !prefix) {
-      return res.status(400).send('Missing required fields: businessName, slug, prefix');
+      return res.status(400).json({ error: 'Missing required fields: businessName, slug, prefix' });
     }
 
-    const RESERVED_SLUGS = new Set(['agency', 'onboard', 'api', 'webhook', 'health', 'demo', 'privacy', 'terms', 'deletion', 'restaurant']);
+    const RESERVED_SLUGS = new Set(['agency', 'onboard', 'api', 'webhook', 'health', 'demo', 'privacy', 'terms', 'deletion', 'restaurant', 'login', 'logout']);
     const cleanSlug = slug.toLowerCase().trim().replace(/[^a-z0-9-]/g, '-').slice(0, 64);
     if (!cleanSlug || RESERVED_SLUGS.has(cleanSlug)) {
-      return res.status(400).send('Invalid or reserved slug.');
+      return res.status(400).json({ error: 'Invalid or reserved slug.' });
     }
 
+    let resolvedWabaId = (providedWabaId && typeof providedWabaId === 'string') ? providedWabaId.trim() : null;
+    let resolvedPhoneId = (providedPhoneId && typeof providedPhoneId === 'string') ? providedPhoneId.trim() : null;
+    let resolvedToken = (metaAccessToken && typeof metaAccessToken === 'string') ? metaAccessToken.trim() : '';
+    let metaBusinessId: string | null = null;
+    let systemUserId: string | null = null;
+    let tokenExpiresAt: string | null = null;
+    let onboardingStatus: 'connected' | 'legacy' | 'pending' | 'failed' = 'pending';
+    let embeddedSignupCompletedAt: string | null = null;
+
+    // Handle Meta Embedded Signup Authorization Code Exchange
+    if (code && typeof code === 'string' && code.trim()) {
+      console.log(`🚀 [Embedded Signup]: Exchanging authorization code for tenant '${cleanSlug}'...`);
+      try {
+        const tokenResult = await exchangeCodeForAccessToken(code.trim());
+        resolvedToken = tokenResult.accessToken;
+
+        if (tokenResult.expiresIn) {
+          const expDate = new Date(Date.now() + tokenResult.expiresIn * 1000);
+          tokenExpiresAt = expDate.toISOString();
+        }
+
+        // Debug and inspect granular scopes to find WABA ID and Business Account
+        try {
+          const debugInfo = await debugToken(resolvedToken);
+          systemUserId = debugInfo.userId || null;
+          
+          if (!resolvedWabaId && debugInfo.granularScopes) {
+            const wabaScope = debugInfo.granularScopes.find(s => s.scope === 'whatsapp_business_management' || s.scope === 'whatsapp_business_messaging');
+            if (wabaScope && wabaScope.targetIds && wabaScope.targetIds.length > 0) {
+              resolvedWabaId = wabaScope.targetIds[0];
+            }
+          }
+        } catch (dbgErr) {
+          console.warn('⚠️ [Embedded Signup]: Token debug warning (continuing):', dbgErr);
+        }
+
+        // If phone ID is not yet known, query WABA phone numbers
+        if (resolvedWabaId && !resolvedPhoneId) {
+          try {
+            const phoneList = await getWabaPhoneNumbers(resolvedWabaId, resolvedToken);
+            if (phoneList.length > 0) {
+              resolvedPhoneId = phoneList[0].id;
+              console.log(`📱 [Embedded Signup]: Discovered Phone Number ID ${resolvedPhoneId} for WABA ${resolvedWabaId}`);
+            }
+          } catch (phoneErr) {
+            console.warn('⚠️ [Embedded Signup]: Could not auto-fetch phone numbers:', phoneErr);
+          }
+        }
+
+        // Subscribe Agency App to client's WABA webhooks
+        if (resolvedWabaId) {
+          try {
+            await subscribeAppToWaba(resolvedWabaId, resolvedToken);
+            console.log(`📡 [Embedded Signup]: Successfully subscribed agency app to WABA ${resolvedWabaId}`);
+          } catch (subErr) {
+            console.error(`⚠️ [Embedded Signup]: Webhook subscription warning for WABA ${resolvedWabaId}:`, subErr);
+          }
+        }
+
+        onboardingStatus = 'connected';
+        embeddedSignupCompletedAt = new Date().toISOString();
+      } catch (exchangeErr: any) {
+        console.error('❌ [Embedded Signup Exchange Failed]:', exchangeErr);
+        return res.status(500).json({ error: `Meta Token Exchange failed: ${exchangeErr.message}` });
+      }
+    } else if (whatsappPhoneNumberId || metaAccessToken) {
+      // Manual Legacy Fallback
+      resolvedPhoneId = whatsappPhoneNumberId ? whatsappPhoneNumberId.trim() : '';
+      resolvedToken = metaAccessToken ? metaAccessToken.trim() : '';
+      onboardingStatus = (resolvedPhoneId && resolvedToken) ? 'legacy' : 'pending';
+    }
+
+    const readyToActivate = Boolean(resolvedPhoneId && resolvedToken);
     const today = new Date();
     const nextResetObj = new Date();
     nextResetObj.setDate(today.getDate() + 30);
     const nextResetDate = nextResetObj.toISOString().split('T')[0];
 
-    // FIX: no more silent fallback to shared/placeholder credentials —
-    // each tenant either supplies their own creds or is created inactive
-    // pending manual credential setup, so nobody accidentally goes live
-    // sending on the agency's shared WhatsApp number without knowing it.
-    const phoneId = (whatsappPhoneNumberId && typeof whatsappPhoneNumberId === 'string' && whatsappPhoneNumberId.trim()) ? whatsappPhoneNumberId.trim() : '';
-    const token = (metaAccessToken && typeof metaAccessToken === 'string' && metaAccessToken.trim()) ? metaAccessToken.trim() : '';
-    const readyToActivate = Boolean(phoneId && token);
+    // Check if client already exists (update vs insert)
+    const existingClient = await db.select().from(clients).where(eq(clients.slug, cleanSlug)).limit(1);
 
-    // Insert into clients table
-    await db.insert(clients).values({
-      businessName,
-      slug: cleanSlug,
-      billingCycle: billingCycle || 'monthly',
-      outboundAllowanceMonthly: 1000,
-      outboundSentThisMonth: 0,
-      nextMonthlyResetDate: nextResetDate,
-      whatsappPhoneNumberId: phoneId || 'PENDING_SETUP',
-      metaAccessToken: token || 'PENDING_SETUP',
-      prefix,
-      googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
-      customWelcomeText: customWelcomeText || null,
-      customMenuText: customMenuText || null,
-      active: readyToActivate
-    });
-
-    // Also insert into restaurants table (for backward compatibility)
-    await db.insert(restaurants).values({
-      name: businessName,
-      slug: cleanSlug,
-      address: address || '',
-      whatsappPhoneNumberId: phoneId || 'PENDING_SETUP',
-      metaAccessToken: token || 'PENDING_SETUP',
-      prefix,
-      managerPhone: managerPhone || '',
-      openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '',
-      openingHoursDinner: openingHoursDinner || '19:00-00:30',
-      googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
-      customWelcomeText: customWelcomeText || null,
-      customMenuText: customMenuText || null,
-      active: readyToActivate
-    });
-
-    console.log(`✅ [Onboarding] Onboarded: ${businessName} (${cleanSlug}) — active=${readyToActivate}`);
-    if (!readyToActivate) {
-      console.warn(`⚠️ [Onboarding] Client '${cleanSlug}' created INACTIVE — missing Meta credentials. Set them before enabling.`);
+    if (existingClient.length > 0) {
+      await db.update(clients).set({
+        businessName,
+        billingCycle: billingCycle || 'monthly',
+        wabaId: resolvedWabaId,
+        whatsappPhoneNumberId: resolvedPhoneId || existingClient[0].whatsappPhoneNumberId,
+        metaAccessToken: resolvedToken || existingClient[0].metaAccessToken,
+        metaBusinessId,
+        systemUserId,
+        embeddedSignupCompletedAt: embeddedSignupCompletedAt || existingClient[0].embeddedSignupCompletedAt,
+        tokenExpiresAt: tokenExpiresAt || existingClient[0].tokenExpiresAt,
+        onboardingStatus,
+        prefix,
+        googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
+        customWelcomeText: customWelcomeText || null,
+        customMenuText: customMenuText || null,
+        openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '',
+        openingHoursDinner: openingHoursDinner || '19:00-00:30',
+        active: readyToActivate
+      }).where(eq(clients.id, existingClient[0].id));
+    } else {
+      await db.insert(clients).values({
+        businessName,
+        slug: cleanSlug,
+        billingCycle: billingCycle || 'monthly',
+        outboundAllowanceMonthly: 1000,
+        outboundSentThisMonth: 0,
+        nextMonthlyResetDate: nextResetDate,
+        wabaId: resolvedWabaId,
+        whatsappPhoneNumberId: resolvedPhoneId || 'PENDING_SETUP',
+        metaAccessToken: resolvedToken || 'PENDING_SETUP',
+        metaBusinessId,
+        systemUserId,
+        embeddedSignupCompletedAt,
+        tokenExpiresAt,
+        onboardingStatus,
+        prefix,
+        googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
+        customWelcomeText: customWelcomeText || null,
+        customMenuText: customMenuText || null,
+        openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '',
+        openingHoursDinner: openingHoursDinner || '19:00-00:30',
+        active: readyToActivate
+      });
     }
 
-    res.redirect(`/agency?onboarded=${cleanSlug}`);
+    // Upsert into restaurants table for backward compatibility
+    const existingRest = await db.select().from(restaurants).where(eq(restaurants.slug, cleanSlug)).limit(1);
+    if (existingRest.length > 0) {
+      await db.update(restaurants).set({
+        name: businessName,
+        address: address || '',
+        wabaId: resolvedWabaId,
+        whatsappPhoneNumberId: resolvedPhoneId || existingRest[0].whatsappPhoneNumberId,
+        metaAccessToken: resolvedToken || existingRest[0].metaAccessToken,
+        metaBusinessId,
+        embeddedSignupCompletedAt: embeddedSignupCompletedAt || existingRest[0].embeddedSignupCompletedAt,
+        tokenExpiresAt: tokenExpiresAt || existingRest[0].tokenExpiresAt,
+        onboardingStatus,
+        prefix,
+        managerPhone: managerPhone || '',
+        openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '',
+        openingHoursDinner: openingHoursDinner || '19:00-00:30',
+        googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
+        customWelcomeText: customWelcomeText || null,
+        customMenuText: customMenuText || null,
+        active: readyToActivate
+      }).where(eq(restaurants.id, existingRest[0].id));
+    } else {
+      await db.insert(restaurants).values({
+        name: businessName,
+        slug: cleanSlug,
+        address: address || '',
+        wabaId: resolvedWabaId,
+        whatsappPhoneNumberId: resolvedPhoneId || 'PENDING_SETUP',
+        metaAccessToken: resolvedToken || 'PENDING_SETUP',
+        metaBusinessId,
+        embeddedSignupCompletedAt,
+        tokenExpiresAt,
+        onboardingStatus,
+        prefix,
+        managerPhone: managerPhone || '',
+        openingHoursLunch: openingHoursLunch !== undefined ? openingHoursLunch : '',
+        openingHoursDinner: openingHoursDinner || '19:00-00:30',
+        googleReviewUrl: googleReviewUrl || 'https://maps.google.com',
+        customWelcomeText: customWelcomeText || null,
+        customMenuText: customMenuText || null,
+        active: readyToActivate
+      });
+    }
+
+    console.log(`✅ [Provisioning Success]: Client '${cleanSlug}' onboarded (status=${onboardingStatus}, active=${readyToActivate})`);
+
+    return res.json({
+      success: true,
+      slug: cleanSlug,
+      wabaId: resolvedWabaId,
+      phoneNumberId: resolvedPhoneId,
+      onboardingStatus,
+      redirectUrl: `/agency?onboarded=${cleanSlug}`
+    });
   } catch (error: any) {
-    console.error('Onboarding error:', error);
-    res.status(500).send('Onboarding failed. Check server logs.');
+    console.error('❌ [Provisioning Error]:', error);
+    res.status(500).json({ error: error.message || 'Onboarding failed. Check server logs.' });
   }
+});
+
+// Legacy POST /api/agency/onboard redirect adapter
+app.post('/api/agency/onboard', requireRole(['agency_admin']), async (req, res) => {
+  // Pass through to embedded-signup exchange handler
+  req.url = '/api/agency/embedded-signup/exchange';
+  return app._router.handle(req, res);
 });
 
 // ----------------------------------------------------
 // 🏛️ MASTER AGENCY DASHBOARD (GET /agency)
 // ----------------------------------------------------
 // FIX (critical): master dashboard (MRR, all clients) was fully public.
-app.get('/agency', requireAdminAuth, async (req, res) => {
+app.get('/agency', requireRole(['agency_admin']), async (req, res) => {
   try {
     const clientList = await db.select().from(clients);
     
@@ -576,20 +1252,25 @@ app.get('/agency', requireAdminAuth, async (req, res) => {
       const tierBadgeClass = c.billingCycle === 'quarterly' ? 'tier-quarterly' : 'tier-monthly';
       const safeName = escapeHtml(c.businessName);
       const safeSlug = escapeHtml(c.slug);
+      const isTechProvider = Boolean(c.wabaId || c.onboardingStatus === 'connected');
+      const wabaBadge = isTechProvider 
+        ? `<div style="font-size:11px; color:#60A5FA; margin-top:3px; font-family:monospace;">🛡️ WABA: ${escapeHtml(c.wabaId || 'Delegated')} (Client Portfolio)</div>`
+        : `<div style="font-size:11px; color:#A8A29E; margin-top:3px; font-family:monospace;">📦 Legacy WABA (Agency Portfolio)</div>`;
 
       return `
         <tr>
           <td class="client-name">
             <strong>${safeName}</strong>
             <div class="client-slug">Slug: /restaurant/${safeSlug}</div>
+            ${wabaBadge}
           </td>
           <td>
-            <span class="tier-badge ${tierBadgeClass}">${escapeHtml((c.billingCycle || 'monthly').toUpperCase())}${c.active ? '' : ' — <span style="color:#F87171">INACTIVE (needs Meta creds)</span>'}</span>
+            <span class="tier-badge ${tierBadgeClass}">${escapeHtml((c.billingCycle || 'monthly').toUpperCase())}${c.active ? '' : ' — <span style="color:#F87171">INACTIVE</span>'}</span>
             <div style="font-size:11px; color:#A8A29E; margin-top:4px;">${tierPrice}</div>
           </td>
           <td>
             <div style="font-weight:700; color:#4ADE80; font-size:13px;">${c.active ? '⚡ Live' : '⏸ Pending setup'}</div>
-            <div style="font-size:11px; color:#A8A29E;">₹0.00 Meta Cost</div>
+            <div style="font-size:11px; color:#A8A29E;">${isTechProvider ? 'Tech Provider Model' : 'Legacy Direct'}</div>
           </td>
           <td>
             <div class="resets-date">📅 Active 24/7 Engine</div>
@@ -666,6 +1347,18 @@ app.get('/agency', requireAdminAuth, async (req, res) => {
       text-decoration: none;
     }
     .btn-onboard:hover { background: #D97706; }
+    .btn-logout {
+      background: #262320;
+      border: 1px solid #3E3932;
+      color: #F87171;
+      padding: 12px 18px;
+      border-radius: 12px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .btn-logout:hover { background: rgba(239, 68, 68, 0.2); border-color: #EF4444; }
     .mrr-badge {
       background: rgba(245, 158, 11, 0.12);
       border: 1.5px solid #F59E0B;
@@ -774,10 +1467,11 @@ app.get('/agency', requireAdminAuth, async (req, res) => {
     <div class="header-banner">
       <div class="agency-title">
         <h1>🍽️ Restaurant Agency Operations Master</h1>
-        <p>Pure WhatsApp Automation Account Ledger • House of Bhaves</p>
+        <p>Pure WhatsApp Automation Account Ledger • House of Bhaves • Logged in as: <strong>${escapeHtml(req.user?.email || 'Admin')}</strong></p>
       </div>
       <div class="header-right-btns">
         <a href="/onboard" class="btn-onboard">➕ Onboard New Restaurant</a>
+        <a href="/logout" class="btn-logout">🚪 Logout</a>
         <div class="mrr-badge">
           💰 MRR: ₹${mrr.toLocaleString('en-IN')}/mo
         </div>
@@ -852,8 +1546,8 @@ app.get('/agency', requireAdminAuth, async (req, res) => {
 // Multi-tenant slug route & fallback (Checks both clients & restaurants tables safely)
 // FIX (critical): full reservation logbook (customer names + phone numbers)
 // for any tenant was reachable by anyone who guessed a slug — a slugified
-// business name is trivially guessable. Now auth-gated + XSS-escaped.
-app.get('/restaurant/:slug?', requireAdminAuth, async (req, res) => {
+// business name is trivially guessable. Now auth-gated to tenant owner or agency admin.
+app.get('/restaurant/:slug?', requireTenantAccess('slug'), async (req, res) => {
   try {
     const targetSlug = (req.params as any).slug || '';
     if (!targetSlug) {
@@ -1246,10 +1940,12 @@ app.get('/restaurant/:slug?', requireAdminAuth, async (req, res) => {
     <div class="header-card">
       <div class="restaurant-title">
         <h1>${escapeHtml(displayName)}</h1>
-        <p>Hostess Front-Desk Ledger • URL Slug: /restaurant/${escapeHtml(displaySlug)}</p>
+        <p>Hostess Front-Desk Ledger • URL Slug: /restaurant/${escapeHtml(displaySlug)} • Logged in: <strong>${escapeHtml(req.user?.email || 'User')}</strong></p>
       </div>
       <div class="header-right">
+        ${req.user?.role === 'agency_admin' ? '<a href="/agency" class="btn-export" style="background:#262320; border:1px solid #3E3932; color:#F3EFE6;">🏛️ Agency Master</a>' : ''}
         <a href="/api/restaurant/${encodeURIComponent(displaySlug)}/export" class="btn-export">📥 Export CSV</a>
+        <a href="/logout" class="btn-export" style="background:rgba(239,68,68,0.15); border:1px solid #EF4444; color:#FCA5A5;">🚪 Logout</a>
         <div class="live-badge">
           <div class="pulse"></div> Live Reception Sync
         </div>
@@ -1386,7 +2082,7 @@ async function main() {
   
   app.listen(config.PORT, () => {
     console.log(`🚀 House of Bhaves Agency Platform running on port ${config.PORT}`);
-    console.log(`🔒 Admin routes (/agency, /onboard, /restaurant/*) require HTTP Basic Auth.`);
+    console.log(`🔒 Protected routes (/agency, /onboard, /restaurant/*) require Session/JWT Authentication (visit /login).`);
     console.log(`🔗 Webhook: http://localhost:${config.PORT}/webhook`);
   });
 }
