@@ -152,13 +152,6 @@ async function initializeDatabase() {
       updated_at TEXT
     )
   `);
-    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_customers_phone_client ON customers(phone_number, client_id)`);
-    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)`);
-    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date)`);
-    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_client_id ON bookings(client_id)`);
-    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_conversations_phone_client ON conversations(phone, client_id)`);
-    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
-    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_users_client_id ON users(client_id)`);
     // Safe Migration Alter Helpers for existing databases
     try {
         await exports.sqlite.execute(`ALTER TABLE clients ADD COLUMN billing_cycle TEXT DEFAULT 'monthly';`);
@@ -236,6 +229,13 @@ async function initializeDatabase() {
         await exports.sqlite.execute(`ALTER TABLE conversations ADD COLUMN client_id INTEGER REFERENCES clients(id);`);
     }
     catch { }
+    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_customers_phone_client ON customers(phone_number, client_id)`);
+    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)`);
+    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date)`);
+    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_client_id ON bookings(client_id)`);
+    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_conversations_phone_client ON conversations(phone, client_id)`);
+    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+    await exports.sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_users_client_id ON users(client_id)`);
     // Safe PRAGMA Execution (Skipped cleanly on Turso Cloud HTTP)
     try {
         await exports.sqlite.execute(`PRAGMA journal_mode = WAL`);

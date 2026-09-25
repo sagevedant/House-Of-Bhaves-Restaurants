@@ -121,14 +121,6 @@ export async function initializeDatabase() {
     )
   `);
 
-  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_customers_phone_client ON customers(phone_number, client_id)`);
-  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)`);
-  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date)`);
-  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_client_id ON bookings(client_id)`);
-  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_conversations_phone_client ON conversations(phone, client_id)`);
-  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
-  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_users_client_id ON users(client_id)`);
-
   // Safe Migration Alter Helpers for existing databases
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN billing_cycle TEXT DEFAULT 'monthly';`); } catch {}
   try { await sqlite.execute(`ALTER TABLE clients ADD COLUMN outbound_allowance_monthly INTEGER DEFAULT 1000;`); } catch {}
@@ -150,6 +142,14 @@ export async function initializeDatabase() {
   try { await sqlite.execute(`ALTER TABLE customers ADD COLUMN last_inbound_interaction TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE bookings ADD COLUMN review_scheduled_at TEXT;`); } catch {}
   try { await sqlite.execute(`ALTER TABLE conversations ADD COLUMN client_id INTEGER REFERENCES clients(id);`); } catch {}
+
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_customers_phone_client ON customers(phone_number, client_id)`);
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)`);
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date)`);
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_client_id ON bookings(client_id)`);
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_conversations_phone_client ON conversations(phone, client_id)`);
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+  await sqlite.execute(`CREATE INDEX IF NOT EXISTS idx_users_client_id ON users(client_id)`);
 
   // Safe PRAGMA Execution (Skipped cleanly on Turso Cloud HTTP)
   try { await sqlite.execute(`PRAGMA journal_mode = WAL`); } catch {}
