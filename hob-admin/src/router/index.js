@@ -3,6 +3,7 @@ import HomeView from '@/views/HomeView.vue'
 import StyleGuideView from '@/views/StyleGuideView.vue'
 import LoginView from '@/views/LoginView.vue'
 import ClientsView from '@/views/ClientsView.vue'
+import ClientDetailView from '@/views/ClientDetailView.vue'
 
 const routes = [
   {
@@ -14,6 +15,11 @@ const routes = [
     path: '/clients',
     name: 'clients',
     component: ClientsView,
+  },
+  {
+    path: '/clients/:id',
+    name: 'client-detail',
+    component: ClientDetailView,
   },
   {
     path: '/tenants',
