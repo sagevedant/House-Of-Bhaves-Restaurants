@@ -732,14 +732,14 @@
         <section class="space-y-4">
           <div class="border-b border-[#23272a] pb-2">
             <h2 class="text-[22px] font-[700] text-[#ffffff] font-display">9. Toast Notification Shell</h2>
-            <p class="text-[14px] text-[#ffffff]/60">feature-card chrome (rounded.lg 16px, medium shadow) with auto-dismiss feel.</p>
+            <p class="text-[14px] text-[#ffffff]/60">feature-card chrome (rounded.lg 16px, max 1 visible at a time, deduped, plain status icons).</p>
           </div>
 
           <div class="border border-[#23272a] rounded-[16px] bg-[#1e2353] p-6 space-y-4">
             <!-- Toast 1: Success / Green -->
             <div class="rounded-[16px] bg-[#0a0d3a] border border-[#35ed7e]/40 p-4 flex items-start gap-3.5 shadow-[0_3px_24px_rgba(53,237,126,0.15)]">
               <div class="w-7 h-7 rounded-full bg-[#35ed7e]/20 border border-[#35ed7e]/50 flex items-center justify-center text-[#35ed7e] shrink-0 mt-0.5">
-                <Check :size="16" :stroke-width="2" />
+                <CheckCircle :size="16" :stroke-width="2" />
               </div>
               <div class="flex-1 min-w-0">
                 <div class="text-[14px] font-[700] text-[#ffffff] font-display">Client Config Saved</div>
@@ -750,14 +750,14 @@
               </button>
             </div>
 
-            <!-- Toast 2: Primary / Magenta Info -->
-            <div class="rounded-[16px] bg-[#0a0d3a] border border-[#ec48bd]/40 p-4 flex items-start gap-3.5 shadow-[0_3px_24px_rgba(236,72,189,0.15)]">
-              <div class="w-7 h-7 rounded-full bg-[#ec48bd]/20 border border-[#ec48bd]/50 flex items-center justify-center text-[#ec48bd] shrink-0 mt-0.5">
-                <Sparkles :size="16" :stroke-width="2" />
+            <!-- Toast 2: Error / Red -->
+            <div class="rounded-[16px] bg-[#0a0d3a] border border-rose-800/60 p-4 flex items-start gap-3.5 shadow-[0_3px_24px_rgba(244,63,94,0.15)]">
+              <div class="w-7 h-7 rounded-full bg-rose-950/60 border border-rose-800/60 flex items-center justify-center text-rose-400 shrink-0 mt-0.5">
+                <XCircle :size="16" :stroke-width="2" />
               </div>
               <div class="flex-1 min-w-0">
-                <div class="text-[14px] font-[700] text-[#ffffff] font-display">New Tenant Provisioned</div>
-                <p class="text-[13px] text-[#ffffff]/70 mt-0.5">Spice Factory Rooftop is ready to accept WhatsApp inbound sessions.</p>
+                <div class="text-[14px] font-[700] text-[#ffffff] font-display">Failed to Sync Token</div>
+                <p class="text-[13px] text-rose-400/90 mt-0.5">Meta Graph API returned 401 Unauthorized.</p>
               </div>
               <button class="text-[#ffffff]/50 hover:text-[#ffffff] transition-colors duration-120 cursor-pointer">
                 <X :size="16" :stroke-width="1.75" />
@@ -778,6 +778,8 @@ import {
   Info,
   Plus,
   Check,
+  CheckCircle,
+  XCircle,
   RotateCw,
   Download,
   Key,
