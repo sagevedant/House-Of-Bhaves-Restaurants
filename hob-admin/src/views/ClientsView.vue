@@ -334,7 +334,7 @@
           Clear Filters
         </button>
         <button
-          @click="showCreateModal = true"
+          @click="openAddClient"
           class="inline-flex items-center gap-2 px-5 py-2.5 rounded-[12px] bg-[#5865f2] hover:bg-[#4752c4] text-[#ffffff] text-[16px] font-[500] transition-colors duration-120 cursor-pointer"
         >
           <Plus :size="18" :stroke-width="1.75" />
@@ -342,12 +342,25 @@
         </button>
       </div>
     </div>
+
+    <!-- Client Side Panel Drawer -->
+    <ClientDrawer
+      :is-open="isDrawerOpen"
+      :client-data="selectedClient"
+      @close="isDrawerOpen = false"
+      @saved="handleClientSaved"
+    />
+
+    <!-- Toast Notification Container -->
+    <AppToast ref="toastRef" />
   </AppLayout>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
+import ClientDrawer from '@/components/ClientDrawer.vue'
+import AppToast from '@/components/AppToast.vue'
 import {
   Sparkles,
   Plus,
@@ -363,10 +376,12 @@ import {
   UtensilsCrossed
 } from 'lucide-vue-next'
 
+const toastRef = ref(null)
 const searchQuery = ref('')
 const statusFilter = ref('ALL')
 const activeKebabId = ref(null)
-const showCreateModal = ref(false)
+const isDrawerOpen = ref(false)
+const selectedClient = ref(null)
 
 // 4-5 fake clients with mixed states (ACTIVE, WARNING, REVOKED)
 const clients = ref([
@@ -375,60 +390,80 @@ const clients = ref([
     name: 'Spice Factory Rooftop & Lounge',
     slug: 'sf-rooftop-01',
     phone: '+91 98765 43210',
+    phoneId: '109876543210987',
     status: 'ACTIVE',
     quotaUsed: 3200,
     quotaMax: 10000,
     quotaPercent: 32,
     mrr: 450,
-    isFeatured: true
+    isFeatured: true,
+    openingTime: '12:00',
+    closingTime: '23:30',
+    promptGuardrail: 'Max table size 8 guests. Request deposit for terrace tables.'
   },
   {
     id: 2,
     name: 'The Bombay Courtyard Kitchen',
     slug: 'bc-mumbai-02',
     phone: '+91 91234 56789',
+    phoneId: '109876543210988',
     status: 'WARNING',
     quotaUsed: 8900,
     quotaMax: 10000,
     quotaPercent: 89,
     mrr: 650,
-    isFeatured: false
+    isFeatured: false,
+    openingTime: '11:30',
+    closingTime: '23:00',
+    promptGuardrail: 'No outside food or alcohol allowed.'
   },
   {
     id: 3,
     name: 'Heritage Bistro Old Town',
     slug: 'hb-delhi-09',
     phone: '+91 99887 76655',
+    phoneId: '109876543210989',
     status: 'REVOKED',
     quotaUsed: 0,
     quotaMax: 5000,
     quotaPercent: 0,
     mrr: 0,
-    isFeatured: false
+    isFeatured: false,
+    openingTime: '10:00',
+    closingTime: '22:00',
+    promptGuardrail: ''
   },
   {
     id: 4,
     name: 'Saffron & Smoke BBQ Grill',
     slug: 'ss-bangalore-04',
     phone: '+91 97711 22334',
+    phoneId: '109876543210990',
     status: 'ACTIVE',
     quotaUsed: 5400,
     quotaMax: 10000,
     quotaPercent: 54,
     mrr: 450,
-    isFeatured: false
+    isFeatured: false,
+    openingTime: '13:00',
+    closingTime: '00:00',
+    promptGuardrail: 'BBQ pit bookings require 2 hour minimum notice.'
   },
   {
     id: 5,
     name: 'Coastal Haven Seafood Lounge',
     slug: 'ch-goa-07',
     phone: '+91 94455 66778',
+    phoneId: '109876543210991',
     status: 'WARNING',
     quotaUsed: 9650,
     quotaMax: 10000,
     quotaPercent: 96,
     mrr: 850,
-    isFeatured: true
+    isFeatured: true,
+    openingTime: '12:00',
+    closingTime: '01:00',
+    promptGuardrail: 'Catch of the day reservations require card authorization.'
   }
 ])
 
@@ -438,11 +473,9 @@ const revokedClientsCount = computed(() => clients.value.filter(c => c.status ==
 
 const filteredClients = computed(() => {
   return clients.value.filter((client) => {
-    // Status filter
     if (statusFilter.value !== 'ALL' && client.status !== statusFilter.value) {
       return false
     }
-    // Search filter
     if (searchQuery.value.trim()) {
       const q = searchQuery.value.toLowerCase()
       const matchName = client.name.toLowerCase().includes(q)
@@ -453,6 +486,11 @@ const filteredClients = computed(() => {
     return true
   })
 })
+
+function openAddClient() {
+  selectedClient.value = null
+  isDrawerOpen.value = true
+}
 
 function toggleKebab(id) {
   if (activeKebabId.value === id) {
@@ -471,14 +509,57 @@ function resetFilters() {
   statusFilter.value = 'ALL'
 }
 
+function handleClientSaved(savedClient) {
+  const index = clients.value.findIndex(c => c.id === savedClient.id)
+  if (index >= 0) {
+    clients.value[index] = { ...clients.value[index], ...savedClient }
+    toastRef.value?.showToast({
+      title: 'Client Updated',
+      message: `${savedClient.name} settings updated successfully.`,
+      type: 'success'
+    })
+  } else {
+    clients.value.unshift(savedClient)
+    toastRef.value?.showToast({
+      title: 'New Client Created',
+      message: `${savedClient.name} provisioned with WhatsApp Webhook.`,
+      type: 'success'
+    })
+  }
+}
+
 function handleAction(type, client) {
   activeKebabId.value = null
-  if (type === 'revoke') {
+  if (type === 'edit') {
+    selectedClient.value = { ...client }
+    isDrawerOpen.value = true
+  } else if (type === 'revoke') {
     client.status = 'REVOKED'
+    toastRef.value?.showToast({
+      title: 'Client Access Revoked',
+      message: `${client.name} WhatsApp webhook token deactivated.`,
+      type: 'error'
+    })
   } else if (type === 'restore') {
     client.status = 'ACTIVE'
+    toastRef.value?.showToast({
+      title: 'Client Access Restored',
+      message: `${client.name} engine back online.`,
+      type: 'success'
+    })
+  } else if (type === 'rotate-token') {
+    toastRef.value?.showToast({
+      title: 'Secret Token Rotated',
+      message: `New signing key deployed for ${client.name}.`,
+      type: 'info'
+    })
   } else if (type === 'delete') {
     clients.value = clients.value.filter(c => c.id !== client.id)
+    toastRef.value?.showToast({
+      title: 'Tenant Deleted',
+      message: `${client.name} permanently removed.`,
+      type: 'error'
+    })
   }
 }
 </script>
