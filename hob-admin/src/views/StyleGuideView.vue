@@ -451,7 +451,7 @@
             <div class="my-6">
               <div class="text-[14px] uppercase tracking-wider font-[700] font-display text-[#ffffff]/80">Total Monthly WhatsApp Conversations</div>
               <div class="text-[56px] font-[700] font-display leading-[1.05] tracking-tight mt-1">42,890</div>
-              <p class="text-[14px] text-[#ffffff]/90 mt-2 font-[500]">+18.4% growth across 32 active restaurant tenants</p>
+              <p class="text-[14px] text-[#ffffff]/90 mt-2 font-[500]">+18.4% growth across 32 active clinic &amp; service tenants</p>
             </div>
             <div class="flex items-center justify-between text-[13px] border-t border-[#ffffff]/20 pt-4">
               <span>Token: <span class="font-mono">feature-card-gradient</span></span>
@@ -496,10 +496,10 @@
           <table class="w-full text-left border-collapse font-sans">
             <thead>
               <tr class="bg-[#1e2353] border-b border-[#23272a] text-[14px] font-[600] uppercase tracking-wider text-[#ffffff]/80">
-                <th class="py-3 px-4">Client / Tenant</th>
+                <th class="py-3 px-4">Clinic / Tenant</th>
                 <th class="py-3 px-4">WhatsApp Phone ID</th>
                 <th class="py-3 px-4">Status</th>
-                <th class="py-3 px-4">Today's Bookings</th>
+                <th class="py-3 px-4">Today's Appointments</th>
                 <th class="py-3 px-4">API Latency</th>
                 <th class="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -508,8 +508,8 @@
               <!-- Row 1 -->
               <tr class="hover:bg-[#1e2353]/60 transition-colors duration-120 group">
                 <td class="py-3 px-4">
-                  <div class="font-[600] text-[#ffffff] text-[16px]">Spice Factory Rooftop</div>
-                  <div class="text-[13px] text-[#00b0f4] font-mono">sf-rooftop-01</div>
+                  <div class="font-[600] text-[#ffffff] text-[16px]">Smize Dental Clinic &amp; Implant Center</div>
+                  <div class="text-[13px] text-[#00b0f4] font-mono">smize-dental-pune</div>
                 </td>
                 <td class="py-3 px-4 font-mono text-[#ffffff]/80 text-[14px]">
                   +91 98765 43210
@@ -521,7 +521,7 @@
                   </span>
                 </td>
                 <td class="py-3 px-4 font-mono text-[#ffffff] text-[14px]">
-                  34 confirmed
+                  18 confirmed
                 </td>
                 <td class="py-3 px-4 font-mono text-[#ffffff]/70 text-[13px]">
                   64ms
@@ -541,8 +541,8 @@
               <!-- Row 2 -->
               <tr class="hover:bg-[#1e2353]/60 transition-colors duration-120 group">
                 <td class="py-3 px-4">
-                  <div class="font-[600] text-[#ffffff] text-[16px]">The Bombay Courtyard</div>
-                  <div class="text-[13px] text-[#00b0f4] font-mono">bc-mumbai-02</div>
+                  <div class="font-[600] text-[#ffffff] text-[16px]">Radiance Skin, Laser &amp; Aesthetics</div>
+                  <div class="text-[13px] text-[#00b0f4] font-mono">radiance-skin-mumbai</div>
                 </td>
                 <td class="py-3 px-4 font-mono text-[#ffffff]/80 text-[14px]">
                   +91 91234 56789
@@ -554,7 +554,7 @@
                   </span>
                 </td>
                 <td class="py-3 px-4 font-mono text-[#ffffff] text-[14px]">
-                  19 confirmed
+                  14 confirmed
                 </td>
                 <td class="py-3 px-4 font-mono text-[#ffffff]/70 text-[13px]">
                   110ms
@@ -574,8 +574,8 @@
               <!-- Row 3 -->
               <tr class="hover:bg-[#1e2353]/60 transition-colors duration-120 group">
                 <td class="py-3 px-4">
-                  <div class="font-[600] text-[#ffffff]/60 text-[16px]">Heritage Bistro Old Town</div>
-                  <div class="text-[13px] text-[#ffffff]/40 font-mono">hb-delhi-09</div>
+                  <div class="font-[600] text-[#ffffff]/60 text-[16px]">Wellness Physiotherapy &amp; Rehab Center</div>
+                  <div class="text-[13px] text-[#ffffff]/40 font-mono">wellness-physio-delhi</div>
                 </td>
                 <td class="py-3 px-4 font-mono text-[#ffffff]/50 text-[14px]">
                   +91 99887 76655
@@ -622,9 +622,9 @@
               <label class="block text-[14px] font-[500] text-[#ffffff]">Client Display Name</label>
               <input
                 type="text"
-                value="Spice Factory Rooftop"
+                value="Smize Dental Clinic & Implant Center"
                 class="w-full rounded-[12px] border border-[#23272a] bg-[#0a0d3a] px-4 py-2.5 text-[16px] text-[#ffffff] placeholder-[#ffffff]/40 transition-colors duration-120 focus:border-[#5865f2] focus:outline-none focus:ring-2 focus:ring-[#5865f2]"
-                placeholder="Enter client name"
+                placeholder="Enter clinic name"
               />
               <p class="text-[13px] text-[#ffffff]/60">Default input with 2px Blurple focus ring</p>
             </div>
@@ -646,7 +646,7 @@
               <textarea
                 rows="2"
                 class="w-full rounded-[12px] border border-[#23272a] bg-[#0a0d3a] px-4 py-2 text-[14px] text-[#ffffff] placeholder-[#ffffff]/40 transition-colors duration-120 focus:border-[#5865f2] focus:outline-none focus:ring-2 focus:ring-[#5865f2]"
-              >Strictly enforce a max table size of 8 guests for rooftop booking slots.</textarea>
+              >Dental consultations and implant inquiries. Consultation slot duration: 30 minutes.</textarea>
             </div>
 
             <!-- Toggles & Checkbox -->
@@ -664,7 +664,7 @@
                     class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-[#ffffff] transition duration-120"
                   />
                 </button>
-                <span class="text-[14px] font-[500] text-[#ffffff]">Auto-confirm WhatsApp Reservations</span>
+                <span class="text-[14px] font-[500] text-[#ffffff]">Auto-confirm WhatsApp Appointments</span>
               </label>
 
               <!-- Checkbox -->
@@ -708,7 +708,7 @@
             <div class="p-6 space-y-4 text-[14px] leading-[1.5] text-[#ffffff]/80">
               <p>
                 Rotating the secret key will immediately invalidate webhook validation tokens for
-                <span class="font-[600] text-[#ffffff] font-mono">Spice Factory Rooftop</span>.
+                <span class="font-[600] text-[#ffffff] font-mono">Smize Dental Clinic & Implant Center</span>.
               </p>
               <div class="rounded-[12px] bg-[#0a0d3a] border border-[#23272a] p-3 text-[13px] text-[#00b0f4] flex items-start gap-2.5">
                 <Info :size="16" :stroke-width="1.75" class="shrink-0 mt-0.5 text-[#00b0f4]" />

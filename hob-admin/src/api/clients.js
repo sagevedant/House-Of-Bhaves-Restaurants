@@ -20,7 +20,7 @@ export async function getClient(id) {
 }
 
 /**
- * Create a new restaurant client
+ * Create a new clinic client
  * @param {object} payload 
  * @returns {Promise<any>}
  */

@@ -158,7 +158,7 @@
 import {
   Layers,
   LayoutDashboard,
-  UtensilsCrossed,
+  Stethoscope,
   MessageSquareCode,
   CalendarCheck,
   ShieldCheck,
@@ -183,9 +183,9 @@ const navItems = [
     icon: LayoutDashboard
   },
   {
-    label: 'Restaurant Tenants',
-    to: '/tenants',
-    icon: UtensilsCrossed,
+    label: 'Clinic Clients',
+    to: '/clients',
+    icon: Stethoscope,
     badge: '32'
   },
   {
@@ -194,7 +194,7 @@ const navItems = [
     icon: MessageSquareCode
   },
   {
-    label: 'Live Bookings',
+    label: 'Appointments',
     to: '/bookings',
     icon: CalendarCheck
   },

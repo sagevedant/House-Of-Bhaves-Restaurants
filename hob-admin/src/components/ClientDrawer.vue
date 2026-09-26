@@ -33,11 +33,11 @@
         <div class="h-16 px-6 border-b border-[#23272a] flex items-center justify-between shrink-0">
           <div class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded-full bg-[#5865f2]/20 border border-[#5865f2]/40 flex items-center justify-center text-[#5865f2]">
-              <UtensilsCrossed :size="16" :stroke-width="1.75" />
+              <Stethoscope :size="16" :stroke-width="1.75" />
             </div>
             <div>
               <h2 class="text-[20px] font-[700] text-[#ffffff] font-display uppercase tracking-tight">
-                {{ isEditing ? 'Edit Client' : 'Add New Client' }}
+                {{ isEditing ? 'Edit Clinic Client' : 'Add New Clinic Client' }}
               </h2>
             </div>
           </div>
@@ -72,12 +72,12 @@
             <!-- Client Name -->
             <div class="space-y-1.5">
               <label class="block text-[14px] font-[500] text-[#ffffff]">
-                Restaurant / Brand Name
+                Clinic / Service Brand Name
               </label>
               <input
                 v-model="form.name"
                 type="text"
-                placeholder="e.g. Spice Factory Rooftop"
+                placeholder="e.g. Smize Dental Clinic & Implant Center"
                 :disabled="isSaving"
                 :class="[
                   'w-full rounded-[12px] bg-[#0a0d3a] border px-4 py-2 text-[15px] text-[#ffffff] placeholder-[#ffffff]/40 transition-colors duration-120 focus:outline-none',
@@ -100,7 +100,7 @@
                 <input
                   v-model="form.slug"
                   type="text"
-                  placeholder="sf-rooftop-01"
+                  placeholder="smize-dental-pune"
                   :disabled="isSaving"
                   :class="[
                     'w-full rounded-[12px] bg-[#0a0d3a] border px-4 py-2 font-mono text-[14px] text-[#00b0f4] placeholder-[#ffffff]/40 transition-colors duration-120 focus:outline-none',
@@ -233,17 +233,17 @@
                 v-model="form.promptGuardrail"
                 rows="3"
                 :disabled="isSaving"
-                placeholder="Specific rules (e.g. max table size 8, terrace deposit requirement)..."
+                placeholder="Specific rules (e.g. dental consult slot 30m, doctor OPD timings, party/patient intake)..."
                 class="w-full rounded-[12px] bg-[#0a0d3a] border border-[#23272a] px-4 py-2 text-[14px] text-[#ffffff] placeholder-[#ffffff]/40 focus:border-[#5865f2] focus:outline-none focus:ring-2 focus:ring-[#5865f2]"
               />
             </div>
           </div>
 
-          <!-- Section 4: Quota & MRR Tier -->
+          <!-- Section 4: Quota & Plan -->
           <div class="space-y-4">
             <div class="border-b border-[#23272a] pb-1.5 flex items-center justify-between">
               <span class="text-[12px] font-[700] uppercase tracking-wider text-[#ffffff]/40 font-display">
-                4. Monthly Quota &amp; Billing
+                4. Monthly Quota &amp; Plan
               </span>
             </div>
 
@@ -263,14 +263,15 @@
               </div>
 
               <div class="space-y-1.5">
-                <label class="block text-[13px] font-[500] text-[#ffffff]">Monthly MRR ($)</label>
-                <input
-                  v-model.number="form.mrr"
-                  type="number"
+                <label class="block text-[13px] font-[500] text-[#ffffff]">Plan</label>
+                <select
+                  v-model="form.plan"
                   :disabled="isSaving"
-                  placeholder="450"
-                  class="w-full rounded-[12px] bg-[#0a0d3a] border border-[#23272a] px-3 py-2 font-mono text-[14px] text-[#ffffff] focus:border-[#5865f2] focus:outline-none focus:ring-2 focus:ring-[#5865f2]"
-                />
+                  class="w-full rounded-[12px] bg-[#0a0d3a] border border-[#23272a] px-3 py-2 text-[14px] text-[#ffffff] focus:border-[#5865f2] focus:outline-none focus:ring-2 focus:ring-[#5865f2] cursor-pointer"
+                >
+                  <option value="MONTHLY">₹999/mo (Monthly)</option>
+                  <option value="QUARTERLY">₹3,000/qtr (Quarterly)</option>
+                </select>
               </div>
             </div>
 
@@ -286,7 +287,7 @@
                   class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-[#ffffff] transition duration-120"
                 />
               </button>
-              <span class="text-[13px] font-[500] text-[#ffffff]">Mark as Featured PRO Client</span>
+              <span class="text-[13px] font-[500] text-[#ffffff]">Mark as Featured PRO Clinic</span>
             </label>
           </div>
         </form>
@@ -321,7 +322,7 @@
 import { ref, reactive, watch } from 'vue'
 import { createClient, updateClient } from '@/api/clients'
 import {
-  UtensilsCrossed,
+  Stethoscope,
   X,
   AlertCircle,
   Check,
@@ -352,11 +353,12 @@ const form = reactive({
   phone: '',
   phoneId: '',
   accessToken: '',
-  openingTime: '12:00',
-  closingTime: '23:30',
+  openingTime: '10:00',
+  closingTime: '20:30',
   promptGuardrail: '',
   quotaMax: 10000,
-  mrr: 450,
+  plan: 'MONTHLY',
+  mrr: 999,
   isFeatured: false
 })
 
@@ -380,11 +382,12 @@ watch(
       form.phone = val.phone || ''
       form.phoneId = val.phoneId || '109876543210987'
       form.accessToken = '••••••••••••••••'
-      form.openingTime = val.openingTime || '12:00'
-      form.closingTime = val.closingTime || '23:30'
+      form.openingTime = val.openingTime || '10:00'
+      form.closingTime = val.closingTime || '20:30'
       form.promptGuardrail = val.promptGuardrail || ''
       form.quotaMax = val.quotaMax || 10000
-      form.mrr = val.mrr || 450
+      form.plan = (val.plan === 'QUARTERLY' || val.mrr === 1000 || val.mrr === 3000) ? 'QUARTERLY' : 'MONTHLY'
+      form.mrr = form.plan === 'QUARTERLY' ? 1000 : 999
       form.isFeatured = !!val.isFeatured
     } else {
       isEditing.value = false
@@ -402,11 +405,12 @@ function resetForm() {
   form.phone = ''
   form.phoneId = ''
   form.accessToken = ''
-  form.openingTime = '12:00'
-  form.closingTime = '23:30'
+  form.openingTime = '10:00'
+  form.closingTime = '20:30'
   form.promptGuardrail = ''
   form.quotaMax = 10000
-  form.mrr = 450
+  form.plan = 'MONTHLY'
+  form.mrr = 999
   form.isFeatured = false
 
   errors.name = ''
@@ -431,7 +435,7 @@ function validate() {
   errors.accessToken = ''
 
   if (!form.name.trim()) {
-    errors.name = 'Restaurant / brand name is required.'
+    errors.name = 'Clinic / service brand name is required.'
     valid = false
   }
 
@@ -477,7 +481,8 @@ async function handleSubmit() {
       closingTime: form.closingTime,
       promptGuardrail: form.promptGuardrail,
       quotaMax: form.quotaMax,
-      mrr: form.mrr,
+      plan: form.plan,
+      mrr: form.plan === 'QUARTERLY' ? 1000 : 999,
       isFeatured: form.isFeatured
     }
 
