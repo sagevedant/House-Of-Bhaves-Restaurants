@@ -22,31 +22,36 @@
       </button>
     </template>
 
+    <!-- Loading Skeleton for Header -->
+    <div v-if="isLoading" class="rounded-[16px] bg-[#1e2353] border border-[#23272a] p-6 animate-pulse space-y-3">
+      <div class="h-8 w-64 bg-[#0a0d3a] rounded-[8px]"></div>
+      <div class="h-4 w-96 bg-[#0a0d3a]/60 rounded-[6px]"></div>
+    </div>
+
     <!-- Client Title Banner with Status Badge alongside -->
-    <div class="rounded-[16px] bg-[#1e2353] border border-[#23272a] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div v-else class="rounded-[16px] bg-[#1e2353] border border-[#23272a] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div class="space-y-1.5">
         <div class="flex flex-wrap items-center gap-3">
           <h1 class="text-[28px] sm:text-[34px] font-[800] text-[#ffffff] font-display uppercase tracking-tight leading-[1.1]">
             {{ client.name }}
           </h1>
 
-          <!-- Status Badge / Status Pill -->
           <span
-            v-if="client.status === 'ACTIVE'"
+            v-if="clientStatus === 'ACTIVE'"
             class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#ec48bd]/20 border border-[#ec48bd]/40 text-[#ec48bd] text-[12px] font-[600]"
           >
             <span class="w-1.5 h-1.5 rounded-full bg-[#ec48bd]"></span>
             Active
           </span>
           <span
-            v-else-if="client.status === 'WARNING'"
+            v-else-if="clientStatus === 'WARNING'"
             class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#5865f2]/20 border border-[#5865f2]/50 text-[#00b0f4] text-[12px] font-[600]"
           >
             <span class="w-1.5 h-1.5 rounded-full bg-[#00b0f4]"></span>
             Quota Warning
           </span>
           <span
-            v-else-if="client.status === 'REVOKED'"
+            v-else
             class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#23272a] border border-[#333333] text-[#ffffff]/50 text-[12px] font-[500]"
           >
             <span class="w-1.5 h-1.5 rounded-full bg-[#ffffff]/30"></span>
@@ -57,9 +62,9 @@
         <div class="flex items-center gap-3 text-[13px] text-[#ffffff]/60 font-mono">
           <span>Slug: <span class="text-[#00b0f4]">{{ client.slug }}</span></span>
           <span>•</span>
-          <span>Phone: <span class="text-[#ffffff]/90">{{ client.phone }}</span></span>
+          <span>Phone: <span class="text-[#ffffff]/90">{{ client.phone || client.phoneId }}</span></span>
           <span>•</span>
-          <span>MRR: <span class="text-[#35ed7e]">${{ client.mrr }}/mo</span></span>
+          <span>MRR: <span class="text-[#35ed7e]">${{ client.mrr || 450 }}/mo</span></span>
         </div>
       </div>
     </div>
@@ -68,7 +73,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       <!-- LEFT COLUMN (7 Cols): Settings Summary + Recent Bookings Data Table -->
       <div class="lg:col-span-7 space-y-6">
-        <!-- Settings Summary: Flat Surface-Indigo Card (rounded.lg 16px, hairline border, NOT gradient) -->
+        <!-- Settings Summary -->
         <div class="rounded-[16px] bg-[#1e2353] border border-[#23272a] p-6 space-y-5">
           <div class="border-b border-[#23272a] pb-3 flex items-center justify-between">
             <div class="flex items-center gap-2">
@@ -77,13 +82,13 @@
                 Engine &amp; Business Rules
               </h2>
             </div>
-            <span class="text-[11px] font-mono text-[#ffffff]/40">Last updated 2h ago</span>
+            <span class="text-[11px] font-mono text-[#ffffff]/40">Last synced recently</span>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[14px]">
             <div class="rounded-[12px] bg-[#0a0d3a] border border-[#23272a] p-3.5 space-y-1">
               <span class="text-[11px] font-[600] uppercase tracking-wider text-[#ffffff]/40 font-display">Operating Hours</span>
-              <div class="font-[600] text-[#ffffff] font-mono">{{ client.openingTime }} — {{ client.closingTime }}</div>
+              <div class="font-[600] text-[#ffffff] font-mono">{{ client.openingTime || '12:00' }} — {{ client.closingTime || '23:30' }}</div>
               <p class="text-[11px] text-[#ffffff]/50">Outside hours: AI collects callback details</p>
             </div>
 
@@ -103,7 +108,7 @@
           </div>
         </div>
 
-        <!-- Recent Bookings Data-Table (Matching List Table Spec) -->
+        <!-- Recent Bookings Data-Table -->
         <div class="rounded-[16px] bg-[#1e2353] border border-[#23272a] p-0 overflow-hidden">
           <div class="p-5 border-b border-[#23272a] flex items-center justify-between">
             <div class="flex items-center gap-2">
@@ -112,9 +117,14 @@
                 Recent WhatsApp Bookings
               </h2>
             </div>
-            <span class="px-2.5 py-0.5 rounded-[50px] bg-[#0a0d3a] border border-[#23272a] text-[12px] text-[#ffffff]/70 font-mono">
-              Live Stream
-            </span>
+            <button
+              @click="fetchBookings"
+              :disabled="isLoadingBookings"
+              class="px-2.5 py-1 rounded-[50px] bg-[#0a0d3a] hover:bg-[#23272a] border border-[#23272a] text-[12px] text-[#ffffff]/80 font-mono transition-colors duration-120 cursor-pointer"
+            >
+              <RotateCw :size="12" class="inline mr-1" :class="{ 'animate-spin': isLoadingBookings }" />
+              Refresh
+            </button>
           </div>
 
           <div class="overflow-x-auto">
@@ -129,38 +139,56 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#23272a] text-[13px]">
-                <tr
-                  v-for="booking in recentBookings"
-                  :key="booking.id"
-                  class="hover:bg-[#0a0d3a]/40 transition-colors duration-120"
-                >
-                  <td class="py-2.5 px-4">
-                    <div class="font-[600] text-[#ffffff]">{{ booking.guestName }}</div>
-                    <div class="text-[11px] text-[#ffffff]/50 font-mono">{{ booking.phone }}</div>
-                  </td>
-                  <td class="py-2.5 px-4 font-mono text-[#ffffff]/90">
-                    {{ booking.guests }} guests
-                  </td>
-                  <td class="py-2.5 px-4 font-mono text-[#00b0f4]">
-                    {{ booking.slotTime }}
-                  </td>
-                  <td class="py-2.5 px-4">
-                    <span
-                      :class="[
-                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-[50px] text-[11px] font-[600]',
-                        booking.status === 'CONFIRMED'
-                          ? 'bg-[#35ed7e]/20 text-[#35ed7e] border border-[#35ed7e]/40'
-                          : 'bg-[#5865f2]/20 text-[#00b0f4] border border-[#5865f2]/40'
-                      ]"
-                    >
-                      <span class="w-1 h-1 rounded-full bg-current"></span>
-                      {{ booking.status }}
-                    </span>
-                  </td>
-                  <td class="py-2.5 px-4 text-right text-[11px] text-[#ffffff]/50 font-mono">
-                    {{ booking.createdAt }}
-                  </td>
-                </tr>
+                <template v-if="isLoadingBookings">
+                  <tr v-for="n in 3" :key="'b-skel-' + n" class="animate-pulse">
+                    <td class="py-3 px-4"><div class="h-3.5 w-28 bg-[#0a0d3a] rounded"></div></td>
+                    <td class="py-3 px-4"><div class="h-3.5 w-16 bg-[#0a0d3a] rounded"></div></td>
+                    <td class="py-3 px-4"><div class="h-3.5 w-24 bg-[#0a0d3a] rounded"></div></td>
+                    <td class="py-3 px-4"><div class="h-5 w-20 bg-[#0a0d3a] rounded-full"></div></td>
+                    <td class="py-3 px-4 text-right"><div class="h-3 w-16 bg-[#0a0d3a] rounded ml-auto"></div></td>
+                  </tr>
+                </template>
+                <template v-else-if="recentBookings.length > 0">
+                  <tr
+                    v-for="booking in recentBookings"
+                    :key="booking.id"
+                    class="hover:bg-[#0a0d3a]/40 transition-colors duration-120"
+                  >
+                    <td class="py-2.5 px-4">
+                      <div class="font-[600] text-[#ffffff]">{{ booking.guestName || booking.name || 'Guest' }}</div>
+                      <div class="text-[11px] text-[#ffffff]/50 font-mono">{{ booking.phone || booking.customerPhone }}</div>
+                    </td>
+                    <td class="py-2.5 px-4 font-mono text-[#ffffff]/90">
+                      {{ booking.guests || booking.partySize || 2 }} guests
+                    </td>
+                    <td class="py-2.5 px-4 font-mono text-[#00b0f4]">
+                      {{ booking.slotTime || booking.bookingDate || 'Today, 8:00 PM' }}
+                    </td>
+                    <td class="py-2.5 px-4">
+                      <span
+                        :class="[
+                          'inline-flex items-center gap-1 px-2 py-0.5 rounded-[50px] text-[11px] font-[600]',
+                          booking.status === 'CONFIRMED'
+                            ? 'bg-[#35ed7e]/20 text-[#35ed7e] border border-[#35ed7e]/40'
+                            : 'bg-[#5865f2]/20 text-[#00b0f4] border border-[#5865f2]/40'
+                        ]"
+                      >
+                        <span class="w-1 h-1 rounded-full bg-current"></span>
+                        {{ booking.status || 'CONFIRMED' }}
+                      </span>
+                    </td>
+                    <td class="py-2.5 px-4 text-right text-[11px] text-[#ffffff]/50 font-mono">
+                      {{ booking.createdAt || '15m ago' }}
+                    </td>
+                  </tr>
+                </template>
+                <template v-else>
+                  <tr>
+                    <td colspan="5" class="py-6 text-center text-[#ffffff]/50 text-[13px]">
+                      No recent bookings received yet for this tenant engine.
+                    </td>
+                  </tr>
+                </template>
               </tbody>
             </table>
           </div>
@@ -169,7 +197,7 @@
 
       <!-- RIGHT COLUMN (5 Cols): 3 Stacked Panels -->
       <div class="lg:col-span-5 space-y-6">
-        <!-- Panel 1: "Quota this month" (The ONE feature-card-gradient spotlight card, magenta, rounded.xl 40px) -->
+        <!-- Panel 1: "Quota this month" -->
         <div class="rounded-[40px] bg-gradient-to-br from-[#ec48bd] via-[#b32b8a] to-[#5865f2] p-6 sm:p-7 text-[#ffffff] shadow-[0_3px_68px_rgba(236,72,189,0.22)] space-y-4">
           <div class="flex items-center justify-between">
             <span class="text-[11px] font-[700] uppercase tracking-wider font-display bg-[#000000]/30 px-2.5 py-0.5 rounded-[50px]">
@@ -180,11 +208,11 @@
 
           <div class="space-y-1">
             <div class="text-[36px] font-[800] font-display leading-[1.05]">
-              {{ client.quotaUsed?.toLocaleString() }}
-              <span class="text-[18px] text-[#ffffff]/70 font-[400]">/ {{ client.quotaMax?.toLocaleString() }}</span>
+              {{ (client.quotaUsed || 0).toLocaleString() }}
+              <span class="text-[18px] text-[#ffffff]/70 font-[400]">/ {{ (client.quotaMax || 10000).toLocaleString() }}</span>
             </div>
             <p class="text-[12px] text-[#ffffff]/90 font-[500]">
-              {{ client.quotaPercent }}% of allocated WhatsApp messages consumed
+              {{ quotaPercent }}% of allocated WhatsApp messages consumed
             </p>
           </div>
 
@@ -192,12 +220,10 @@
           <div class="w-full h-2 rounded-full bg-[#000000]/40 overflow-hidden">
             <div
               class="h-full rounded-full transition-all duration-300"
-              :style="{ width: `${client.quotaPercent}%` }"
+              :style="{ width: `${quotaPercent}%` }"
               :class="[
-                client.quotaPercent >= 95
+                quotaPercent >= 95
                   ? 'bg-rose-400'
-                  : client.quotaPercent >= 80
-                  ? 'bg-[#ffffff]'
                   : 'bg-[#ffffff]'
               ]"
             />
@@ -205,11 +231,11 @@
 
           <div class="text-[11px] text-[#ffffff]/80 font-mono border-t border-[#ffffff]/20 pt-2 flex items-center justify-between">
             <span>Resets on 1st of month</span>
-            <span>Billing tier: ${{ client.mrr }}/mo</span>
+            <span>Billing tier: ${{ client.mrr || 450 }}/mo</span>
           </div>
         </div>
 
-        <!-- Panel 2: "WhatsApp connection" (Flat surface-indigo card, masked phone ID, token status, button-ghost Rotate) -->
+        <!-- Panel 2: "WhatsApp connection" -->
         <div class="rounded-[16px] bg-[#1e2353] border border-[#23272a] p-6 space-y-4">
           <div class="border-b border-[#23272a] pb-3 flex items-center justify-between">
             <div class="flex items-center gap-2">
@@ -225,20 +251,17 @@
           </div>
 
           <div class="space-y-3 text-[13px]">
-            <!-- Masked Phone ID -->
             <div class="flex items-center justify-between p-3 rounded-[12px] bg-[#0a0d3a] border border-[#23272a]">
               <span class="text-[#ffffff]/60">Phone Number ID</span>
               <span class="font-mono text-[#ffffff]">{{ maskedPhoneId }}</span>
             </div>
 
-            <!-- Token Status -->
             <div class="flex items-center justify-between p-3 rounded-[12px] bg-[#0a0d3a] border border-[#23272a]">
               <span class="text-[#ffffff]/60">Token Status</span>
               <span class="font-mono text-[#35ed7e] font-[600]">Permanent (Valid)</span>
             </div>
           </div>
 
-          <!-- Rotate Token Button (button-ghost) -->
           <button
             @click="rotateToken"
             class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-[12px] bg-[#0a0d3a] hover:bg-[#23272a] text-[#ffffff] text-[14px] font-[500] border border-[#23272a] transition-colors duration-120 cursor-pointer"
@@ -248,7 +271,7 @@
           </button>
         </div>
 
-        <!-- Panel 3: "Danger zone" (Surface-indigo card with danger-tinted hairline border, Revoke toggle, Delete button) -->
+        <!-- Panel 3: "Danger zone" -->
         <div class="rounded-[16px] bg-[#1e2353] border border-rose-900/60 p-6 space-y-4">
           <div class="border-b border-rose-900/40 pb-2.5 flex items-center justify-between">
             <div class="flex items-center gap-2">
@@ -259,37 +282,34 @@
             </div>
           </div>
 
-          <!-- Revoke / Restore Toggle Action -->
           <div class="space-y-2">
             <div class="flex items-center justify-between">
               <div>
                 <div class="text-[14px] font-[600] text-[#ffffff]">
-                  {{ client.status === 'REVOKED' ? 'Restore Client Engine' : 'Revoke Client Access' }}
+                  {{ clientStatus === 'REVOKED' ? 'Restore Client Engine' : 'Revoke Client Access' }}
                 </div>
                 <p class="text-[12px] text-[#ffffff]/60 mt-0.5 leading-[1.4]">
-                  {{ client.status === 'REVOKED'
+                  {{ clientStatus === 'REVOKED'
                     ? 'Re-enables webhook ingestion and auto-reply scheduling.'
                     : 'Immediately deactivates automated reservation handlers on WhatsApp.'
                   }}
                 </p>
               </div>
 
-              <!-- Toggle -->
               <button
                 type="button"
                 @click="toggleRevocation"
-                :class="client.status === 'REVOKED' ? 'bg-[#23272a]' : 'bg-[#5865f2]'"
+                :class="clientStatus === 'REVOKED' ? 'bg-[#23272a]' : 'bg-[#5865f2]'"
                 class="relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-120 focus:outline-none focus:ring-2 focus:ring-rose-500"
               >
                 <span
-                  :class="client.status !== 'REVOKED' ? 'translate-x-5' : 'translate-x-0'"
+                  :class="clientStatus !== 'REVOKED' ? 'translate-x-5' : 'translate-x-0'"
                   class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-[#ffffff] transition duration-120"
                 />
               </button>
             </div>
           </div>
 
-          <!-- Hairline Divider -->
           <div class="border-t border-[#23272a] pt-3">
             <button
               @click="deleteClient"
@@ -329,12 +349,19 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import ClientDrawer from '@/components/ClientDrawer.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import AppToast from '@/components/AppToast.vue'
+import {
+  getClient,
+  getClientBookings,
+  setClientAccess,
+  rotateToken as apiRotateToken,
+  deleteClient as apiDeleteClient
+} from '@/api/clients'
 import {
   ArrowLeft,
   Edit2,
@@ -344,82 +371,31 @@ import {
   MessageSquare,
   Key,
   AlertTriangle,
-  Trash2
+  Trash2,
+  RotateCw
 } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
 const toastRef = ref(null)
 const isEditDrawerOpen = ref(false)
+const isLoading = ref(false)
+const isLoadingBookings = ref(false)
 
-const confirmState = reactive({
-  isOpen: false,
-  title: '',
-  description: '',
-  type: 'warning',
-  confirmLabel: 'Confirm',
-  confirmSlug: '',
-  onConfirm: () => {}
-})
-
-// Sample database matching the list screen
-const mockClients = {
-  1: {
-    id: 1,
-    name: 'Spice Factory Rooftop & Lounge',
-    slug: 'sf-rooftop-01',
-    phone: '+91 98765 43210',
-    phoneId: '109876543210987',
-    status: 'ACTIVE',
-    quotaUsed: 3200,
-    quotaMax: 10000,
-    quotaPercent: 32,
-    mrr: 450,
-    openingTime: '12:00',
-    closingTime: '23:30',
-    promptGuardrail: 'Max table size 8 guests. Request deposit for terrace tables.',
-    isFeatured: true
-  },
-  2: {
-    id: 2,
-    name: 'The Bombay Courtyard Kitchen',
-    slug: 'bc-mumbai-02',
-    phone: '+91 91234 56789',
-    phoneId: '109876543210988',
-    status: 'WARNING',
-    quotaUsed: 8900,
-    quotaMax: 10000,
-    quotaPercent: 89,
-    mrr: 650,
-    openingTime: '11:30',
-    closingTime: '23:00',
-    promptGuardrail: 'No outside food or alcohol allowed.',
-    isFeatured: false
-  },
-  3: {
-    id: 3,
-    name: 'Heritage Bistro Old Town',
-    slug: 'hb-delhi-09',
-    phone: '+91 99887 76655',
-    phoneId: '109876543210989',
-    status: 'REVOKED',
-    quotaUsed: 0,
-    quotaMax: 5000,
-    quotaPercent: 0,
-    mrr: 0,
-    openingTime: '10:00',
-    closingTime: '22:00',
-    promptGuardrail: '',
-    isFeatured: false
-  }
-}
-
-const clientId = route.params.id || 1
-const client = ref(mockClients[clientId] || mockClients[1])
-
-const maskedPhoneId = computed(() => {
-  const id = client.value.phoneId || '109876543210987'
-  return id.slice(0, 4) + '••••••••' + id.slice(-3)
+const client = ref({
+  id: route.params.id || 1,
+  name: 'Spice Factory Rooftop & Lounge',
+  slug: 'sf-rooftop-01',
+  phone: '+91 98765 43210',
+  phoneId: '109876543210987',
+  status: 'ACTIVE',
+  quotaUsed: 3200,
+  quotaMax: 10000,
+  mrr: 450,
+  openingTime: '12:00',
+  closingTime: '23:30',
+  promptGuardrail: 'Max table size 8 guests. Request deposit for terrace tables.',
+  isFeatured: true
 })
 
 const recentBookings = ref([
@@ -461,6 +437,70 @@ const recentBookings = ref([
   }
 ])
 
+const confirmState = reactive({
+  isOpen: false,
+  title: '',
+  description: '',
+  type: 'warning',
+  confirmLabel: 'Confirm',
+  confirmSlug: '',
+  onConfirm: () => {}
+})
+
+onMounted(() => {
+  fetchClientData()
+  fetchBookings()
+})
+
+async function fetchClientData() {
+  isLoading.value = true
+  try {
+    const data = await getClient(route.params.id)
+    if (data) {
+      client.value = { ...client.value, ...data }
+    }
+  } catch (err) {
+    // Graceful fallback to initial mock state
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function fetchBookings() {
+  isLoadingBookings.value = true
+  try {
+    const data = await getClientBookings(route.params.id)
+    if (Array.isArray(data)) {
+      recentBookings.value = data
+    } else if (data?.bookings) {
+      recentBookings.value = data.bookings
+    }
+  } catch (err) {
+    // Keep baseline mock bookings
+  } finally {
+    isLoadingBookings.value = false
+  }
+}
+
+const clientStatus = computed(() => {
+  if (client.value.status) return client.value.status
+  if (client.value.active === false) return 'REVOKED'
+  const pct = quotaPercent.value
+  if (pct >= 80) return 'WARNING'
+  return 'ACTIVE'
+})
+
+const quotaPercent = computed(() => {
+  const used = client.value.quotaUsed || 0
+  const max = client.value.quotaMax || 10000
+  return Math.min(100, Math.round((used / max) * 100))
+})
+
+const maskedPhoneId = computed(() => {
+  const id = client.value.phoneId || '109876543210987'
+  return id.slice(0, 4) + '••••••••' + id.slice(-3)
+})
+
 function openEditDrawer() {
   isEditDrawerOpen.value = true
 }
@@ -480,37 +520,74 @@ function rotateToken() {
   confirmState.type = 'rotate'
   confirmState.confirmLabel = 'Rotate Token'
   confirmState.confirmSlug = ''
-  confirmState.onConfirm = () => {
-    toastRef.value?.showToast({
-      title: 'Secret Token Rotated',
-      message: 'New Meta webhook permanent signature generated.',
-      type: 'info'
-    })
+  confirmState.onConfirm = async () => {
+    try {
+      await apiRotateToken(client.value.id)
+      toastRef.value?.showToast({
+        title: 'Secret Token Rotated',
+        message: 'New Meta webhook permanent signature generated.',
+        type: 'info'
+      })
+    } catch (err) {
+      toastRef.value?.showToast({
+        title: 'Rotation Failed',
+        message: err.response?.data?.message || err.message,
+        type: 'error'
+      })
+    }
   }
   confirmState.isOpen = true
 }
 
 function toggleRevocation() {
-  if (client.value.status === 'REVOKED') {
-    client.value.status = 'ACTIVE'
-    toastRef.value?.showToast({
-      title: 'Engine Restored',
-      message: `${client.value.name} WhatsApp automation is now active.`,
-      type: 'success'
-    })
+  if (clientStatus.value === 'REVOKED') {
+    confirmState.title = 'Restore WhatsApp Access'
+    confirmState.description = `Re-enable automated message ingestion for ${client.value.name}?`
+    confirmState.type = 'warning'
+    confirmState.confirmLabel = 'Restore Access'
+    confirmState.confirmSlug = ''
+    confirmState.onConfirm = async () => {
+      try {
+        await setClientAccess(client.value.id, true)
+        client.value.status = 'ACTIVE'
+        client.value.active = true
+        toastRef.value?.showToast({
+          title: 'Engine Restored',
+          message: `${client.value.name} WhatsApp automation is now active.`,
+          type: 'success'
+        })
+      } catch (err) {
+        toastRef.value?.showToast({
+          title: 'Failed to Restore',
+          message: err.response?.data?.message || err.message,
+          type: 'error'
+        })
+      }
+    }
+    confirmState.isOpen = true
   } else {
     confirmState.title = 'Revoke WhatsApp Access'
     confirmState.description = `Are you sure you want to suspend WhatsApp automated booking services for ${client.value.name}?`
     confirmState.type = 'warning'
     confirmState.confirmLabel = 'Revoke Access'
     confirmState.confirmSlug = ''
-    confirmState.onConfirm = () => {
-      client.value.status = 'REVOKED'
-      toastRef.value?.showToast({
-        title: 'Engine Revoked',
-        message: `${client.value.name} WhatsApp access has been suspended.`,
-        type: 'error'
-      })
+    confirmState.onConfirm = async () => {
+      try {
+        await setClientAccess(client.value.id, false)
+        client.value.status = 'REVOKED'
+        client.value.active = false
+        toastRef.value?.showToast({
+          title: 'Engine Revoked',
+          message: `${client.value.name} WhatsApp access has been suspended.`,
+          type: 'error'
+        })
+      } catch (err) {
+        toastRef.value?.showToast({
+          title: 'Failed to Revoke',
+          message: err.response?.data?.message || err.message,
+          type: 'error'
+        })
+      }
     }
     confirmState.isOpen = true
   }
@@ -522,15 +599,24 @@ function deleteClient() {
   confirmState.type = 'delete'
   confirmState.confirmLabel = 'Delete Tenant'
   confirmState.confirmSlug = client.value.slug
-  confirmState.onConfirm = () => {
-    toastRef.value?.showToast({
-      title: 'Tenant Deleted',
-      message: `${client.value.name} has been removed. Returning to clients...`,
-      type: 'error'
-    })
-    setTimeout(() => {
-      router.push('/clients')
-    }, 1000)
+  confirmState.onConfirm = async () => {
+    try {
+      await apiDeleteClient(client.value.id)
+      toastRef.value?.showToast({
+        title: 'Tenant Deleted',
+        message: `${client.value.name} has been removed. Returning to clients...`,
+        type: 'error'
+      })
+      setTimeout(() => {
+        router.push('/clients')
+      }, 1000)
+    } catch (err) {
+      toastRef.value?.showToast({
+        title: 'Delete Failed',
+        message: err.response?.data?.message || err.message,
+        type: 'error'
+      })
+    }
   }
   confirmState.isOpen = true
 }

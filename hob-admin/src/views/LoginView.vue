@@ -6,7 +6,6 @@
       style="background: radial-gradient(circle at 50% 40%, rgba(88, 101, 242, 0.45) 0%, rgba(236, 72, 189, 0.25) 45%, rgba(10, 13, 58, 0) 75%);"
     />
 
-    <!-- Secondary subtle corner atmosphere -->
     <div
       class="pointer-events-none absolute -top-40 -right-40 w-96 h-96 rounded-full opacity-20"
       style="background: radial-gradient(circle, rgba(236, 72, 189, 0.6) 0%, rgba(10, 13, 58, 0) 70%);"
@@ -72,7 +71,6 @@
           :disabled="isLoading"
           class="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-[12px] bg-[#35ed7e] hover:bg-[#2ed66f] active:bg-[#26b85e] text-[#000000] text-[18px] font-[700] leading-[1.4] transition-colors duration-120 focus:outline-none focus:ring-2 focus:ring-[#35ed7e] focus:ring-offset-2 focus:ring-offset-[#1e2353] cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <!-- Loading Spinner State -->
           <Loader2 v-if="isLoading" :size="20" :stroke-width="2.5" class="animate-spin" />
           <span v-if="!isLoading">Sign In</span>
           <span v-else>Authenticating...</span>
@@ -85,6 +83,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { login } from '@/api/auth'
 import { Layers, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -105,19 +104,10 @@ async function handleSubmit() {
   isLoading.value = true
 
   try {
-    // Simulate brief authentication network turnaround
-    await new Promise((resolve) => setTimeout(resolve, 800))
-
-    if (token.value.trim().length < 4) {
-      errorMessage.value = 'Invalid access token. Operator privileges required.'
-      isLoading.value = false
-      return
-    }
-
-    // Success navigation to dashboard
-    router.push('/')
+    await login(token.value.trim())
+    router.push('/clients')
   } catch (err) {
-    errorMessage.value = 'Authentication service unreachable. Please retry.'
+    errorMessage.value = err.response?.data?.message || 'Invalid access token or authentication service unavailable.'
   } finally {
     isLoading.value = false
   }

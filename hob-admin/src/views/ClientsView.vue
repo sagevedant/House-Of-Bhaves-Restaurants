@@ -5,7 +5,7 @@
   >
     <template #header-actions>
       <button
-        @click="showCreateModal = true"
+        @click="openAddClient"
         class="inline-flex items-center gap-2 px-4 py-2 rounded-[12px] bg-[#5865f2] hover:bg-[#4752c4] active:bg-[#3c45a5] text-[#ffffff] text-[16px] font-[500] leading-[1.4] transition-colors duration-120 focus:outline-none focus:ring-2 focus:ring-[#5865f2] cursor-pointer"
       >
         <Plus :size="18" :stroke-width="1.75" />
@@ -24,8 +24,12 @@
           <Sparkles :size="18" :stroke-width="2" />
         </div>
         <div class="my-2">
-          <div class="text-[34px] font-[700] font-display leading-[1.1]">$18,450</div>
-          <p class="text-[12px] text-[#ffffff]/90 font-[500] mt-0.5">+14.2% monthly recurring revenue</p>
+          <div class="text-[34px] font-[700] font-display leading-[1.1]">
+            ${{ totalMRR.toLocaleString() }}
+          </div>
+          <p class="text-[12px] text-[#ffffff]/90 font-[500] mt-0.5">
+            Active monthly subscriptions
+          </p>
         </div>
         <div class="text-[11px] text-[#ffffff]/70 font-mono border-t border-[#ffffff]/20 pt-2 flex justify-between">
           <span>Tier billing cycle</span>
@@ -69,7 +73,7 @@
             30d Bookings
           </span>
           <div class="text-[32px] font-[700] font-display text-[#ffffff] leading-none">
-            1,284
+            {{ totalBookingsEstimate }}
           </div>
           <div class="text-[12px] text-[#ffffff]/60 font-[500] flex items-center gap-1.5 font-mono pt-1">
             <span>avg 42 / day</span>
@@ -78,7 +82,7 @@
       </div>
     </div>
 
-    <!-- Filter & Search Toolbar (Surface-Indigo Chrome) -->
+    <!-- Filter & Search Toolbar -->
     <div class="rounded-[16px] bg-[#1e2353] border border-[#23272a] p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
       <!-- Search Input -->
       <div class="relative flex-1 max-w-md">
@@ -93,7 +97,6 @@
 
       <!-- Filters & Actions -->
       <div class="flex items-center gap-3">
-        <!-- Status Filter Dropdown -->
         <div class="relative">
           <select
             v-model="statusFilter"
@@ -113,11 +116,20 @@
         >
           Reset
         </button>
+
+        <button
+          @click="fetchClients"
+          :disabled="isLoading"
+          title="Refresh Data"
+          class="w-9 h-9 rounded-[12px] bg-[#0a0d3a] hover:bg-[#23272a] text-[#ffffff]/80 hover:text-[#ffffff] border border-[#23272a] flex items-center justify-center transition-colors duration-120 cursor-pointer disabled:opacity-50"
+        >
+          <RotateCw :size="16" :stroke-width="1.75" :class="{ 'animate-spin': isLoading }" />
+        </button>
       </div>
     </div>
 
-    <!-- Data Table Container (Rounded.sm 12px corners on container only) -->
-    <div v-if="filteredClients.length > 0" class="rounded-[12px] bg-[#0a0d3a] border border-[#23272a] overflow-hidden">
+    <!-- Data Table Container with Loading Skeletons -->
+    <div class="rounded-[12px] bg-[#0a0d3a] border border-[#23272a] overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse font-sans">
           <thead>
@@ -131,186 +143,214 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-[#23272a] text-[14px]">
-            <tr
-              v-for="client in filteredClients"
-              :key="client.id"
-              :class="[
-                'transition-colors duration-120 group relative',
-                client.status === 'REVOKED' ? 'opacity-70 bg-[#0a0d3a]' : 'hover:bg-[#1e2353]/50'
-              ]"
-            >
-              <!-- Client Name & Slug -->
-              <td class="py-3 px-4">
-                <div class="font-[600] text-[#ffffff] text-[15px] flex items-center gap-2">
-                  <span>{{ client.name }}</span>
-                  <span v-if="client.isFeatured" class="px-1.5 py-0.2 rounded-[4px] bg-[#ec48bd]/20 text-[#ec48bd] text-[10px] font-[700] uppercase">
-                    Pro
-                  </span>
-                </div>
-                <div class="text-[12px] text-[#00b0f4] font-mono">{{ client.slug }}</div>
-              </td>
+            <!-- Skeleton Rows while Loading -->
+            <template v-if="isLoading">
+              <tr v-for="n in 4" :key="'skel-' + n" class="animate-pulse">
+                <td class="py-4 px-4">
+                  <div class="h-4 w-40 bg-[#1e2353] rounded-[4px] mb-1.5"></div>
+                  <div class="h-3 w-24 bg-[#1e2353]/60 rounded-[4px]"></div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="h-3.5 w-28 bg-[#1e2353] rounded-[4px]"></div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="h-6 w-20 bg-[#1e2353] rounded-[50px]"></div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="h-3 w-28 bg-[#1e2353] rounded-[4px] mb-1.5"></div>
+                  <div class="h-1.5 w-full bg-[#1e2353] rounded-full"></div>
+                </td>
+                <td class="py-4 px-4">
+                  <div class="h-3.5 w-16 bg-[#1e2353] rounded-[4px]"></div>
+                </td>
+                <td class="py-4 px-4 text-right">
+                  <div class="h-7 w-7 bg-[#1e2353] rounded-full ml-auto"></div>
+                </td>
+              </tr>
+            </template>
 
-              <!-- WhatsApp Phone ID -->
-              <td class="py-3 px-4 font-mono text-[#ffffff]/80 text-[13px]">
-                {{ client.phone }}
-              </td>
-
-              <!-- Status Column (Badge / Status Pill Component) -->
-              <td class="py-3 px-4">
-                <!-- Magenta-tinted Active -->
-                <span
-                  v-if="client.status === 'ACTIVE'"
-                  class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#ec48bd]/20 border border-[#ec48bd]/40 text-[#ec48bd] text-[12px] font-[600]"
-                >
-                  <span class="w-1.5 h-1.5 rounded-full bg-[#ec48bd]"></span>
-                  Active
-                </span>
-
-                <!-- Amber-tinted Quota Warning -->
-                <span
-                  v-else-if="client.status === 'WARNING'"
-                  class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#5865f2]/20 border border-[#5865f2]/50 text-[#00b0f4] text-[12px] font-[600]"
-                >
-                  <span class="w-1.5 h-1.5 rounded-full bg-[#00b0f4]"></span>
-                  Quota Warning
-                </span>
-
-                <!-- Muted-gray Revoked -->
-                <span
-                  v-else-if="client.status === 'REVOKED'"
-                  class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#23272a] border border-[#333333] text-[#ffffff]/50 text-[12px] font-[500]"
-                >
-                  <span class="w-1.5 h-1.5 rounded-full bg-[#ffffff]/30"></span>
-                  Revoked
-                </span>
-              </td>
-
-              <!-- Quota Column (Thin progress bar) -->
-              <td class="py-3 px-4">
-                <div class="space-y-1">
-                  <div class="flex items-center justify-between text-[12px] font-mono">
-                    <span class="text-[#ffffff]/70">{{ client.quotaUsed.toLocaleString() }} / {{ client.quotaMax.toLocaleString() }}</span>
-                    <span
-                      :class="[
-                        client.quotaPercent >= 95
-                          ? 'text-rose-400 font-[700]'
-                          : client.quotaPercent >= 80
-                          ? 'text-[#00b0f4] font-[600]'
-                          : 'text-[#ffffff]/60'
-                      ]"
-                    >
-                      {{ client.quotaPercent }}%
+            <!-- Rendered Clients Rows -->
+            <template v-else-if="filteredClients.length > 0">
+              <tr
+                v-for="client in filteredClients"
+                :key="client.id"
+                :class="[
+                  'transition-colors duration-120 group relative',
+                  client.status === 'REVOKED' || client.active === false ? 'opacity-70 bg-[#0a0d3a]' : 'hover:bg-[#1e2353]/50'
+                ]"
+              >
+                <!-- Client Name & Slug -->
+                <td class="py-3 px-4">
+                  <router-link
+                    :to="`/clients/${client.id}`"
+                    class="font-[600] text-[#ffffff] text-[15px] flex items-center gap-2 hover:text-[#5865f2] transition-colors duration-120"
+                  >
+                    <span>{{ client.name }}</span>
+                    <span v-if="client.isFeatured" class="px-1.5 py-0.2 rounded-[4px] bg-[#ec48bd]/20 text-[#ec48bd] text-[10px] font-[700] uppercase">
+                      Pro
                     </span>
+                  </router-link>
+                  <div class="text-[12px] text-[#00b0f4] font-mono">{{ client.slug }}</div>
+                </td>
+
+                <!-- WhatsApp Phone ID -->
+                <td class="py-3 px-4 font-mono text-[#ffffff]/80 text-[13px]">
+                  {{ client.phone || client.phoneId || '—' }}
+                </td>
+
+                <!-- Status Column (Badge / Status Pill Component) -->
+                <td class="py-3 px-4">
+                  <!-- Magenta-tinted Active -->
+                  <span
+                    v-if="getClientStatus(client) === 'ACTIVE'"
+                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#ec48bd]/20 border border-[#ec48bd]/40 text-[#ec48bd] text-[12px] font-[600]"
+                  >
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#ec48bd]"></span>
+                    Active
+                  </span>
+
+                  <!-- Cyan/Amber-tinted Quota Warning -->
+                  <span
+                    v-else-if="getClientStatus(client) === 'WARNING'"
+                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#5865f2]/20 border border-[#5865f2]/50 text-[#00b0f4] text-[12px] font-[600]"
+                  >
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#00b0f4]"></span>
+                    Quota Warning
+                  </span>
+
+                  <!-- Muted-gray Revoked -->
+                  <span
+                    v-else
+                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#23272a] border border-[#333333] text-[#ffffff]/50 text-[12px] font-[500]"
+                  >
+                    <span class="w-1.5 h-1.5 rounded-full bg-[#ffffff]/30"></span>
+                    Revoked
+                  </span>
+                </td>
+
+                <!-- Quota Column (Thin progress bar) -->
+                <td class="py-3 px-4">
+                  <div class="space-y-1">
+                    <div class="flex items-center justify-between text-[12px] font-mono">
+                      <span class="text-[#ffffff]/70">{{ (client.quotaUsed || 0).toLocaleString() }} / {{ (client.quotaMax || 10000).toLocaleString() }}</span>
+                      <span
+                        :class="[
+                          calculateQuotaPercent(client) >= 95
+                            ? 'text-rose-400 font-[700]'
+                            : calculateQuotaPercent(client) >= 80
+                            ? 'text-[#00b0f4] font-[600]'
+                            : 'text-[#ffffff]/60'
+                        ]"
+                      >
+                        {{ calculateQuotaPercent(client) }}%
+                      </span>
+                    </div>
+                    <div class="w-full h-1.5 rounded-full bg-[#23272a] overflow-hidden">
+                      <div
+                        class="h-full rounded-full transition-all duration-300"
+                        :style="{ width: `${calculateQuotaPercent(client)}%` }"
+                        :class="[
+                          calculateQuotaPercent(client) >= 95
+                            ? 'bg-rose-500'
+                            : calculateQuotaPercent(client) >= 80
+                            ? 'bg-[#00b0f4]'
+                            : 'bg-[#5865f2]'
+                        ]"
+                      />
+                    </div>
                   </div>
-                  <!-- Progress Bar: Blurple <80%, Warning link cyan >=80%, Danger rose >=95% -->
-                  <div class="w-full h-1.5 rounded-full bg-[#23272a] overflow-hidden">
+                </td>
+
+                <!-- MRR Tier -->
+                <td class="py-3 px-4 font-mono text-[#ffffff]/80 text-[13px]">
+                  ${{ client.mrr || 450 }}/mo
+                </td>
+
+                <!-- Actions Kebab Menu -->
+                <td class="py-3 px-4 text-right relative">
+                  <div class="inline-flex items-center justify-end">
+                    <button
+                      type="button"
+                      @click.stop="toggleKebab(client.id)"
+                      class="w-8 h-8 rounded-full hover:bg-[#23272a] text-[#ffffff]/70 hover:text-[#ffffff] flex items-center justify-center transition-colors duration-120 cursor-pointer"
+                      aria-label="Actions"
+                    >
+                      <MoreVertical :size="16" :stroke-width="1.75" />
+                    </button>
+
+                    <!-- Kebab Dropdown Menu -->
                     <div
-                      class="h-full rounded-full transition-all duration-300"
-                      :style="{ width: `${client.quotaPercent}%` }"
-                      :class="[
-                        client.quotaPercent >= 95
-                          ? 'bg-rose-500'
-                          : client.quotaPercent >= 80
-                          ? 'bg-[#00b0f4]'
-                          : 'bg-[#5865f2]'
-                      ]"
-                    />
+                      v-if="activeKebabId === client.id"
+                      class="absolute right-4 top-11 z-30 w-48 rounded-[12px] border border-[#23272a] bg-[#1e2353] shadow-[0_3px_24px_rgba(0,0,0,0.4)] py-1.5 text-left text-[13px] font-sans"
+                    >
+                      <button
+                        @click="handleAction('edit', client)"
+                        class="w-full px-3 py-1.5 text-[#ffffff]/90 hover:bg-[#0a0d3a] hover:text-[#ffffff] flex items-center gap-2 transition-colors duration-120 text-left cursor-pointer"
+                      >
+                        <Edit2 :size="14" :stroke-width="1.75" class="text-[#00b0f4]" />
+                        <span>Edit Client</span>
+                      </button>
+
+                      <router-link
+                        :to="`/clients/${client.id}`"
+                        class="w-full px-3 py-1.5 text-[#ffffff]/90 hover:bg-[#0a0d3a] hover:text-[#ffffff] flex items-center gap-2 transition-colors duration-120 text-left"
+                      >
+                        <Calendar :size="14" :stroke-width="1.75" class="text-[#5865f2]" />
+                        <span>View Bookings</span>
+                      </router-link>
+
+                      <div class="my-1 border-t border-[#23272a]"></div>
+
+                      <!-- Revoke or Restore -->
+                      <button
+                        v-if="getClientStatus(client) !== 'REVOKED'"
+                        @click="handleAction('revoke', client)"
+                        class="w-full px-3 py-1.5 text-[#ffffff]/90 hover:bg-[#0a0d3a] hover:text-[#ffffff] flex items-center gap-2 transition-colors duration-120 text-left cursor-pointer"
+                      >
+                        <PauseCircle :size="14" :stroke-width="1.75" class="text-amber-400" />
+                        <span>Revoke Access</span>
+                      </button>
+                      <button
+                        v-else
+                        @click="handleAction('restore', client)"
+                        class="w-full px-3 py-1.5 text-[#35ed7e] hover:bg-[#0a0d3a] flex items-center gap-2 transition-colors duration-120 text-left cursor-pointer"
+                      >
+                        <PlayCircle :size="14" :stroke-width="1.75" class="text-[#35ed7e]" />
+                        <span>Restore Access</span>
+                      </button>
+
+                      <!-- Rotate token -->
+                      <button
+                        @click="handleAction('rotate-token', client)"
+                        class="w-full px-3 py-1.5 text-[#ffffff]/90 hover:bg-[#0a0d3a] hover:text-[#ffffff] flex items-center gap-2 transition-colors duration-120 text-left cursor-pointer"
+                      >
+                        <Key :size="14" :stroke-width="1.75" class="text-[#00b0f4]" />
+                        <span>Rotate Token</span>
+                      </button>
+
+                      <div class="my-1 border-t border-[#23272a]"></div>
+
+                      <!-- Delete -->
+                      <button
+                        @click="handleAction('delete', client)"
+                        class="w-full px-3 py-1.5 text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 flex items-center gap-2 transition-colors duration-120 text-left cursor-pointer font-[500]"
+                      >
+                        <Trash2 :size="14" :stroke-width="1.75" class="text-rose-400" />
+                        <span>Delete Tenant</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </td>
-
-              <!-- MRR Tier -->
-              <td class="py-3 px-4 font-mono text-[#ffffff]/80 text-[13px]">
-                ${{ client.mrr }}/mo
-              </td>
-
-              <!-- Actions Kebab Menu -->
-              <td class="py-3 px-4 text-right relative">
-                <div class="inline-flex items-center justify-end">
-                  <button
-                    type="button"
-                    @click.stop="toggleKebab(client.id)"
-                    class="w-8 h-8 rounded-full hover:bg-[#23272a] text-[#ffffff]/70 hover:text-[#ffffff] flex items-center justify-center transition-colors duration-120 cursor-pointer"
-                    aria-label="Actions"
-                  >
-                    <MoreVertical :size="16" :stroke-width="1.75" />
-                  </button>
-
-                  <!-- Kebab Dropdown Menu Shell -->
-                  <div
-                    v-if="activeKebabId === client.id"
-                    v-click-outside="closeKebab"
-                    class="absolute right-4 top-11 z-30 w-48 rounded-[12px] border border-[#23272a] bg-[#1e2353] shadow-[0_3px_24px_rgba(0,0,0,0.4)] py-1.5 text-left text-[13px] font-sans"
-                  >
-                    <button
-                      @click="handleAction('edit', client)"
-                      class="w-full px-3 py-1.5 text-[#ffffff]/90 hover:bg-[#0a0d3a] hover:text-[#ffffff] flex items-center gap-2 transition-colors duration-120 text-left cursor-pointer"
-                    >
-                      <Edit2 :size="14" :stroke-width="1.75" class="text-[#00b0f4]" />
-                      <span>Edit Client</span>
-                    </button>
-
-                    <button
-                      @click="handleAction('bookings', client)"
-                      class="w-full px-3 py-1.5 text-[#ffffff]/90 hover:bg-[#0a0d3a] hover:text-[#ffffff] flex items-center gap-2 transition-colors duration-120 text-left cursor-pointer"
-                    >
-                      <Calendar :size="14" :stroke-width="1.75" class="text-[#5865f2]" />
-                      <span>View Bookings</span>
-                    </button>
-
-                    <!-- Divider -->
-                    <div class="my-1 border-t border-[#23272a]"></div>
-
-                    <!-- Revoke or Restore -->
-                    <button
-                      v-if="client.status !== 'REVOKED'"
-                      @click="handleAction('revoke', client)"
-                      class="w-full px-3 py-1.5 text-[#ffffff]/90 hover:bg-[#0a0d3a] hover:text-[#ffffff] flex items-center gap-2 transition-colors duration-120 text-left cursor-pointer"
-                    >
-                      <PauseCircle :size="14" :stroke-width="1.75" class="text-amber-400" />
-                      <span>Revoke Access</span>
-                    </button>
-                    <button
-                      v-else
-                      @click="handleAction('restore', client)"
-                      class="w-full px-3 py-1.5 text-[#35ed7e] hover:bg-[#0a0d3a] flex items-center gap-2 transition-colors duration-120 text-left cursor-pointer"
-                    >
-                      <PlayCircle :size="14" :stroke-width="1.75" class="text-[#35ed7e]" />
-                      <span>Restore Access</span>
-                    </button>
-
-                    <!-- Rotate token -->
-                    <button
-                      @click="handleAction('rotate-token', client)"
-                      class="w-full px-3 py-1.5 text-[#ffffff]/90 hover:bg-[#0a0d3a] hover:text-[#ffffff] flex items-center gap-2 transition-colors duration-120 text-left cursor-pointer"
-                    >
-                      <Key :size="14" :stroke-width="1.75" class="text-[#00b0f4]" />
-                      <span>Rotate Token</span>
-                    </button>
-
-                    <!-- Divider -->
-                    <div class="my-1 border-t border-[#23272a]"></div>
-
-                    <!-- Delete (Red / Danger) -->
-                    <button
-                      @click="handleAction('delete', client)"
-                      class="w-full px-3 py-1.5 text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 flex items-center gap-2 transition-colors duration-120 text-left cursor-pointer font-[500]"
-                    >
-                      <Trash2 :size="14" :stroke-width="1.75" class="text-rose-400" />
-                      <span>Delete Tenant</span>
-                    </button>
-                  </div>
-                </div>
-              </td>
-            </tr>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
     </div>
 
-    <!-- Empty State: Allowed to use Feature-Card-Dark with rounded.xl (40px) + heading-sm message -->
+    <!-- Empty State: Allowed to use Feature-Card-Dark with rounded.xl (40px) -->
     <div
-      v-else
+      v-if="!isLoading && filteredClients.length === 0"
       class="rounded-[40px] bg-[#1e2353] border border-[#23272a] p-12 text-center max-w-xl mx-auto space-y-5 my-8 shadow-[0_3px_68px_rgba(88,101,242,0.12)]"
     >
       <div class="w-16 h-16 rounded-full bg-[#0a0d3a] border border-[#23272a] flex items-center justify-center text-[#5865f2] mx-auto">
@@ -351,16 +391,35 @@
       @saved="handleClientSaved"
     />
 
+    <!-- Action Confirmation Dialog -->
+    <ConfirmDialog
+      :is-open="confirmState.isOpen"
+      :title="confirmState.title"
+      :description="confirmState.description"
+      :type="confirmState.type"
+      :confirm-label="confirmState.confirmLabel"
+      :confirm-slug="confirmState.confirmSlug"
+      @close="confirmState.isOpen = false"
+      @confirm="confirmState.onConfirm"
+    />
+
     <!-- Toast Notification Container -->
     <AppToast ref="toastRef" />
   </AppLayout>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import AppLayout from '@/components/AppLayout.vue'
 import ClientDrawer from '@/components/ClientDrawer.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import AppToast from '@/components/AppToast.vue'
+import {
+  getClients,
+  setClientAccess,
+  rotateToken as apiRotateToken,
+  deleteClient as apiDeleteClient
+} from '@/api/clients'
 import {
   Sparkles,
   Plus,
@@ -373,7 +432,8 @@ import {
   PauseCircle,
   PlayCircle,
   Trash2,
-  UtensilsCrossed
+  UtensilsCrossed,
+  RotateCw
 } from 'lucide-vue-next'
 
 const toastRef = ref(null)
@@ -382,9 +442,22 @@ const statusFilter = ref('ALL')
 const activeKebabId = ref(null)
 const isDrawerOpen = ref(false)
 const selectedClient = ref(null)
+const isLoading = ref(false)
 
-// 4-5 fake clients with mixed states (ACTIVE, WARNING, REVOKED)
-const clients = ref([
+const clients = ref([])
+
+const confirmState = reactive({
+  isOpen: false,
+  title: '',
+  description: '',
+  type: 'warning',
+  confirmLabel: 'Confirm',
+  confirmSlug: '',
+  onConfirm: () => {}
+})
+
+// Initial fallback mock data if backend not yet running
+const initialClients = [
   {
     id: 1,
     name: 'Spice Factory Rooftop & Lounge',
@@ -394,7 +467,6 @@ const clients = ref([
     status: 'ACTIVE',
     quotaUsed: 3200,
     quotaMax: 10000,
-    quotaPercent: 32,
     mrr: 450,
     isFeatured: true,
     openingTime: '12:00',
@@ -410,7 +482,6 @@ const clients = ref([
     status: 'WARNING',
     quotaUsed: 8900,
     quotaMax: 10000,
-    quotaPercent: 89,
     mrr: 650,
     isFeatured: false,
     openingTime: '11:30',
@@ -426,7 +497,6 @@ const clients = ref([
     status: 'REVOKED',
     quotaUsed: 0,
     quotaMax: 5000,
-    quotaPercent: 0,
     mrr: 0,
     isFeatured: false,
     openingTime: '10:00',
@@ -442,7 +512,6 @@ const clients = ref([
     status: 'ACTIVE',
     quotaUsed: 5400,
     quotaMax: 10000,
-    quotaPercent: 54,
     mrr: 450,
     isFeatured: false,
     openingTime: '13:00',
@@ -458,29 +527,76 @@ const clients = ref([
     status: 'WARNING',
     quotaUsed: 9650,
     quotaMax: 10000,
-    quotaPercent: 96,
     mrr: 850,
     isFeatured: true,
     openingTime: '12:00',
     closingTime: '01:00',
     promptGuardrail: 'Catch of the day reservations require card authorization.'
   }
-])
+]
 
-const activeClientsCount = computed(() => clients.value.filter(c => c.status === 'ACTIVE').length)
-const warningClientsCount = computed(() => clients.value.filter(c => c.status === 'WARNING').length)
-const revokedClientsCount = computed(() => clients.value.filter(c => c.status === 'REVOKED').length)
+onMounted(() => {
+  fetchClients()
+})
+
+async function fetchClients() {
+  isLoading.value = true
+  try {
+    const data = await getClients()
+    clients.value = Array.isArray(data) ? data : (data?.clients || initialClients)
+  } catch (err) {
+    // Graceful fallback to initial state with non-intrusive toast
+    if (clients.value.length === 0) {
+      clients.value = initialClients
+    }
+    toastRef.value?.showToast({
+      title: 'API Sync Notice',
+      message: err.message || 'Connecting to local development API...',
+      type: 'info',
+      duration: 3000
+    })
+  } finally {
+    isLoading.value = false
+  }
+}
+
+function getClientStatus(client) {
+  if (client.status) return client.status
+  if (client.active === false) return 'REVOKED'
+  const pct = calculateQuotaPercent(client)
+  if (pct >= 80) return 'WARNING'
+  return 'ACTIVE'
+}
+
+function calculateQuotaPercent(client) {
+  const used = client.quotaUsed || 0
+  const max = client.quotaMax || 10000
+  return Math.min(100, Math.round((used / max) * 100))
+}
+
+const totalMRR = computed(() => {
+  return clients.value.reduce((sum, c) => sum + (c.mrr || 450), 0)
+})
+
+const totalBookingsEstimate = computed(() => {
+  return clients.value.length * 280
+})
+
+const activeClientsCount = computed(() => clients.value.filter(c => getClientStatus(c) === 'ACTIVE').length)
+const warningClientsCount = computed(() => clients.value.filter(c => getClientStatus(c) === 'WARNING').length)
+const revokedClientsCount = computed(() => clients.value.filter(c => getClientStatus(c) === 'REVOKED').length)
 
 const filteredClients = computed(() => {
   return clients.value.filter((client) => {
-    if (statusFilter.value !== 'ALL' && client.status !== statusFilter.value) {
+    const st = getClientStatus(client)
+    if (statusFilter.value !== 'ALL' && st !== statusFilter.value) {
       return false
     }
     if (searchQuery.value.trim()) {
       const q = searchQuery.value.toLowerCase()
-      const matchName = client.name.toLowerCase().includes(q)
-      const matchSlug = client.slug.toLowerCase().includes(q)
-      const matchPhone = client.phone.toLowerCase().includes(q)
+      const matchName = (client.name || '').toLowerCase().includes(q)
+      const matchSlug = (client.slug || '').toLowerCase().includes(q)
+      const matchPhone = (client.phone || client.phoneId || '').toLowerCase().includes(q)
       if (!matchName && !matchSlug && !matchPhone) return false
     }
     return true
@@ -498,10 +614,6 @@ function toggleKebab(id) {
   } else {
     activeKebabId.value = id
   }
-}
-
-function closeKebab() {
-  activeKebabId.value = null
 }
 
 function resetFilters() {
@@ -530,36 +642,107 @@ function handleClientSaved(savedClient) {
 
 function handleAction(type, client) {
   activeKebabId.value = null
+
   if (type === 'edit') {
     selectedClient.value = { ...client }
     isDrawerOpen.value = true
   } else if (type === 'revoke') {
-    client.status = 'REVOKED'
-    toastRef.value?.showToast({
-      title: 'Client Access Revoked',
-      message: `${client.name} WhatsApp webhook token deactivated.`,
-      type: 'error'
-    })
+    confirmState.title = 'Revoke WhatsApp Access'
+    confirmState.description = `Are you sure you want to suspend WhatsApp automated booking services for ${client.name}?`
+    confirmState.type = 'warning'
+    confirmState.confirmLabel = 'Revoke Access'
+    confirmState.confirmSlug = ''
+    confirmState.onConfirm = async () => {
+      try {
+        await setClientAccess(client.id, false)
+        client.status = 'REVOKED'
+        client.active = false
+        toastRef.value?.showToast({
+          title: 'Access Revoked',
+          message: `${client.name} WhatsApp webhook suspended.`,
+          type: 'error'
+        })
+      } catch (err) {
+        toastRef.value?.showToast({
+          title: 'Error Revoking Access',
+          message: err.response?.data?.message || err.message,
+          type: 'error'
+        })
+      }
+    }
+    confirmState.isOpen = true
   } else if (type === 'restore') {
-    client.status = 'ACTIVE'
-    toastRef.value?.showToast({
-      title: 'Client Access Restored',
-      message: `${client.name} engine back online.`,
-      type: 'success'
-    })
+    confirmState.title = 'Restore WhatsApp Access'
+    confirmState.description = `Re-enable automated message ingestion for ${client.name}?`
+    confirmState.type = 'warning'
+    confirmState.confirmLabel = 'Restore Access'
+    confirmState.confirmSlug = ''
+    confirmState.onConfirm = async () => {
+      try {
+        await setClientAccess(client.id, true)
+        client.status = 'ACTIVE'
+        client.active = true
+        toastRef.value?.showToast({
+          title: 'Access Restored',
+          message: `${client.name} is now online.`,
+          type: 'success'
+        })
+      } catch (err) {
+        toastRef.value?.showToast({
+          title: 'Error Restoring Access',
+          message: err.response?.data?.message || err.message,
+          type: 'error'
+        })
+      }
+    }
+    confirmState.isOpen = true
   } else if (type === 'rotate-token') {
-    toastRef.value?.showToast({
-      title: 'Secret Token Rotated',
-      message: `New signing key deployed for ${client.name}.`,
-      type: 'info'
-    })
+    confirmState.title = 'Rotate Signing Secret'
+    confirmState.description = `Generating a new token will invalidate active webhook signatures for ${client.name}.`
+    confirmState.type = 'rotate'
+    confirmState.confirmLabel = 'Rotate Token'
+    confirmState.confirmSlug = ''
+    confirmState.onConfirm = async () => {
+      try {
+        await apiRotateToken(client.id)
+        toastRef.value?.showToast({
+          title: 'Secret Token Rotated',
+          message: `New signing key deployed for ${client.name}.`,
+          type: 'info'
+        })
+      } catch (err) {
+        toastRef.value?.showToast({
+          title: 'Token Rotation Failed',
+          message: err.response?.data?.message || err.message,
+          type: 'error'
+        })
+      }
+    }
+    confirmState.isOpen = true
   } else if (type === 'delete') {
-    clients.value = clients.value.filter(c => c.id !== client.id)
-    toastRef.value?.showToast({
-      title: 'Tenant Deleted',
-      message: `${client.name} permanently removed.`,
-      type: 'error'
-    })
+    confirmState.title = `Delete ${client.name}?`
+    confirmState.description = 'This action cannot be undone. All conversation histories and tenant configurations will be permanently purged.'
+    confirmState.type = 'delete'
+    confirmState.confirmLabel = 'Delete Tenant'
+    confirmState.confirmSlug = client.slug
+    confirmState.onConfirm = async () => {
+      try {
+        await apiDeleteClient(client.id)
+        clients.value = clients.value.filter(c => c.id !== client.id)
+        toastRef.value?.showToast({
+          title: 'Tenant Deleted',
+          message: `${client.name} permanently removed.`,
+          type: 'error'
+        })
+      } catch (err) {
+        toastRef.value?.showToast({
+          title: 'Deletion Failed',
+          message: err.response?.data?.message || err.message,
+          type: 'error'
+        })
+      }
+    }
+    confirmState.isOpen = true
   }
 }
 </script>

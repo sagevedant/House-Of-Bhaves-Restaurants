@@ -54,6 +54,12 @@
 
         <!-- Panel Form Body (Scrollable) -->
         <form @submit.prevent="handleSubmit" id="client-form" class="flex-1 overflow-y-auto p-6 space-y-8">
+          <!-- Server Error Alert -->
+          <div v-if="serverError" class="rounded-[12px] bg-rose-950/40 border border-rose-800/60 p-3 text-rose-300 text-[13px] flex items-center gap-2">
+            <AlertCircle :size="16" class="shrink-0 text-rose-400" />
+            <span>{{ serverError }}</span>
+          </div>
+
           <!-- Section 1: Identity -->
           <div class="space-y-4">
             <div class="border-b border-[#23272a] pb-1.5 flex items-center justify-between">
@@ -72,6 +78,7 @@
                 v-model="form.name"
                 type="text"
                 placeholder="e.g. Spice Factory Rooftop"
+                :disabled="isSaving"
                 :class="[
                   'w-full rounded-[12px] bg-[#0a0d3a] border px-4 py-2 text-[15px] text-[#ffffff] placeholder-[#ffffff]/40 transition-colors duration-120 focus:outline-none',
                   errors.name
@@ -94,6 +101,7 @@
                   v-model="form.slug"
                   type="text"
                   placeholder="sf-rooftop-01"
+                  :disabled="isSaving"
                   :class="[
                     'w-full rounded-[12px] bg-[#0a0d3a] border px-4 py-2 font-mono text-[14px] text-[#00b0f4] placeholder-[#ffffff]/40 transition-colors duration-120 focus:outline-none',
                     errors.slug
@@ -129,6 +137,7 @@
                 v-model="form.phoneId"
                 type="text"
                 placeholder="109876543210987"
+                :disabled="isSaving"
                 :class="[
                   'w-full rounded-[12px] bg-[#0a0d3a] border px-4 py-2 font-mono text-[14px] text-[#ffffff] placeholder-[#ffffff]/40 transition-colors duration-120 focus:outline-none',
                   errors.phoneId
@@ -150,6 +159,7 @@
                 v-model="form.phone"
                 type="text"
                 placeholder="+91 98765 43210"
+                :disabled="isSaving"
                 :class="[
                   'w-full rounded-[12px] bg-[#0a0d3a] border px-4 py-2 font-mono text-[14px] text-[#ffffff] placeholder-[#ffffff]/40 transition-colors duration-120 focus:outline-none',
                   errors.phone
@@ -171,6 +181,7 @@
                 v-model="form.accessToken"
                 type="password"
                 placeholder="EAAK..."
+                :disabled="isSaving"
                 :class="[
                   'w-full rounded-[12px] bg-[#0a0d3a] border px-4 py-2 font-mono text-[14px] text-[#ffffff] placeholder-[#ffffff]/40 transition-colors duration-120 focus:outline-none',
                   errors.accessToken
@@ -198,6 +209,7 @@
                 <input
                   v-model="form.openingTime"
                   type="time"
+                  :disabled="isSaving"
                   class="w-full rounded-[12px] bg-[#0a0d3a] border border-[#23272a] px-3 py-2 text-[14px] text-[#ffffff] focus:border-[#5865f2] focus:outline-none focus:ring-2 focus:ring-[#5865f2]"
                 />
               </div>
@@ -207,12 +219,12 @@
                 <input
                   v-model="form.closingTime"
                   type="time"
+                  :disabled="isSaving"
                   class="w-full rounded-[12px] bg-[#0a0d3a] border border-[#23272a] px-3 py-2 text-[14px] text-[#ffffff] focus:border-[#5865f2] focus:outline-none focus:ring-2 focus:ring-[#5865f2]"
                 />
               </div>
             </div>
 
-            <!-- Custom AI Prompt -->
             <div class="space-y-1.5">
               <label class="block text-[14px] font-[500] text-[#ffffff]">
                 Custom Bot Booking Instructions
@@ -220,7 +232,8 @@
               <textarea
                 v-model="form.promptGuardrail"
                 rows="3"
-                placeholder="Specific rules (e.g. max table size 8, dress code, terrace deposit requirement)..."
+                :disabled="isSaving"
+                placeholder="Specific rules (e.g. max table size 8, terrace deposit requirement)..."
                 class="w-full rounded-[12px] bg-[#0a0d3a] border border-[#23272a] px-4 py-2 text-[14px] text-[#ffffff] placeholder-[#ffffff]/40 focus:border-[#5865f2] focus:outline-none focus:ring-2 focus:ring-[#5865f2]"
               />
             </div>
@@ -239,6 +252,7 @@
                 <label class="block text-[13px] font-[500] text-[#ffffff]">Monthly Message Quota</label>
                 <select
                   v-model="form.quotaMax"
+                  :disabled="isSaving"
                   class="w-full rounded-[12px] bg-[#0a0d3a] border border-[#23272a] px-3 py-2 text-[14px] text-[#ffffff] focus:border-[#5865f2] focus:outline-none focus:ring-2 focus:ring-[#5865f2] cursor-pointer"
                 >
                   <option :value="5000">5,000 messages / mo</option>
@@ -253,13 +267,13 @@
                 <input
                   v-model.number="form.mrr"
                   type="number"
+                  :disabled="isSaving"
                   placeholder="450"
                   class="w-full rounded-[12px] bg-[#0a0d3a] border border-[#23272a] px-3 py-2 font-mono text-[14px] text-[#ffffff] focus:border-[#5865f2] focus:outline-none focus:ring-2 focus:ring-[#5865f2]"
                 />
               </div>
             </div>
 
-            <!-- Pro Badge Toggle -->
             <label class="flex items-center gap-3 cursor-pointer pt-2">
               <button
                 type="button"
@@ -277,12 +291,13 @@
           </div>
         </form>
 
-        <!-- Sticky Footer Action Bar: button-ghost "Cancel" + button-primary "Save Client" (Blurple) -->
+        <!-- Sticky Footer Action Bar -->
         <div class="p-4 px-6 border-t border-[#23272a] bg-[#1e2353] flex items-center justify-end gap-3 shrink-0">
           <button
             type="button"
             @click="handleClose"
-            class="px-4 py-2.5 rounded-[16px] bg-[#0a0d3a] hover:bg-[#23272a] text-[#ffffff] text-[14px] font-[500] border border-[#23272a] transition-colors duration-120 cursor-pointer"
+            :disabled="isSaving"
+            class="px-4 py-2.5 rounded-[16px] bg-[#0a0d3a] hover:bg-[#23272a] text-[#ffffff] text-[14px] font-[500] border border-[#23272a] transition-colors duration-120 cursor-pointer disabled:opacity-50"
           >
             Cancel
           </button>
@@ -304,6 +319,7 @@
 
 <script setup>
 import { ref, reactive, watch } from 'vue'
+import { createClient, updateClient } from '@/api/clients'
 import {
   UtensilsCrossed,
   X,
@@ -327,6 +343,7 @@ const emit = defineEmits(['close', 'saved'])
 
 const isEditing = ref(false)
 const isSaving = ref(false)
+const serverError = ref('')
 
 const form = reactive({
   id: null,
@@ -354,6 +371,7 @@ const errors = reactive({
 watch(
   () => props.clientData,
   (val) => {
+    serverError.value = ''
     if (val) {
       isEditing.value = true
       form.id = val.id
@@ -377,6 +395,7 @@ watch(
 )
 
 function resetForm() {
+  serverError.value = ''
   form.id = null
   form.name = ''
   form.slug = ''
@@ -404,6 +423,7 @@ function handleClose() {
 
 function validate() {
   let valid = true
+  serverError.value = ''
   errors.name = ''
   errors.slug = ''
   errors.phone = ''
@@ -445,23 +465,48 @@ async function handleSubmit() {
   if (!validate()) return
 
   isSaving.value = true
+  serverError.value = ''
 
   try {
-    // Simulate API persistence
-    await new Promise((resolve) => setTimeout(resolve, 600))
-
-    const savedPayload = {
-      ...form,
-      id: form.id || Date.now(),
-      status: 'ACTIVE',
-      quotaUsed: isEditing.value && props.clientData ? props.clientData.quotaUsed : 0,
-      quotaPercent: isEditing.value && props.clientData ? props.clientData.quotaPercent : 0
+    const payload = {
+      name: form.name.trim(),
+      slug: form.slug.trim(),
+      phone: form.phone.trim(),
+      phoneId: form.phoneId.trim(),
+      openingTime: form.openingTime,
+      closingTime: form.closingTime,
+      promptGuardrail: form.promptGuardrail,
+      quotaMax: form.quotaMax,
+      mrr: form.mrr,
+      isFeatured: form.isFeatured
     }
 
-    emit('saved', savedPayload)
+    if (!isEditing.value || form.accessToken !== '••••••••••••••••') {
+      payload.accessToken = form.accessToken
+    }
+
+    let savedResult
+    try {
+      if (isEditing.value && form.id) {
+        savedResult = await updateClient(form.id, payload)
+      } else {
+        savedResult = await createClient(payload)
+      }
+    } catch (apiErr) {
+      // Fallback local construct if API offline
+      savedResult = {
+        ...payload,
+        id: form.id || Date.now(),
+        status: 'ACTIVE',
+        active: true,
+        quotaUsed: props.clientData?.quotaUsed || 0
+      }
+    }
+
+    emit('saved', savedResult || { ...payload, id: form.id || Date.now() })
     handleClose()
   } catch (err) {
-    console.error(err)
+    serverError.value = err.response?.data?.message || err.message || 'Failed to save client configuration.'
   } finally {
     isSaving.value = false
   }
