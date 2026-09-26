@@ -311,16 +311,29 @@
       @saved="handleClientUpdated"
     />
 
+    <!-- Action Confirmation Dialog -->
+    <ConfirmDialog
+      :is-open="confirmState.isOpen"
+      :title="confirmState.title"
+      :description="confirmState.description"
+      :type="confirmState.type"
+      :confirm-label="confirmState.confirmLabel"
+      :confirm-slug="confirmState.confirmSlug"
+      @close="confirmState.isOpen = false"
+      @confirm="confirmState.onConfirm"
+    />
+
     <!-- Toast Notifications -->
     <AppToast ref="toastRef" />
   </AppLayout>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/AppLayout.vue'
 import ClientDrawer from '@/components/ClientDrawer.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import AppToast from '@/components/AppToast.vue'
 import {
   ArrowLeft,
@@ -338,6 +351,16 @@ const route = useRoute()
 const router = useRouter()
 const toastRef = ref(null)
 const isEditDrawerOpen = ref(false)
+
+const confirmState = reactive({
+  isOpen: false,
+  title: '',
+  description: '',
+  type: 'warning',
+  confirmLabel: 'Confirm',
+  confirmSlug: '',
+  onConfirm: () => {}
+})
 
 // Sample database matching the list screen
 const mockClients = {
@@ -452,11 +475,19 @@ function handleClientUpdated(updated) {
 }
 
 function rotateToken() {
-  toastRef.value?.showToast({
-    title: 'Secret Token Rotated',
-    message: 'New Meta webhook permanent signature generated.',
-    type: 'info'
-  })
+  confirmState.title = 'Rotate WhatsApp Access Token'
+  confirmState.description = `Rotating this token will invalidate existing Meta webhook credentials for ${client.value.name}.`
+  confirmState.type = 'rotate'
+  confirmState.confirmLabel = 'Rotate Token'
+  confirmState.confirmSlug = ''
+  confirmState.onConfirm = () => {
+    toastRef.value?.showToast({
+      title: 'Secret Token Rotated',
+      message: 'New Meta webhook permanent signature generated.',
+      type: 'info'
+    })
+  }
+  confirmState.isOpen = true
 }
 
 function toggleRevocation() {
@@ -468,23 +499,39 @@ function toggleRevocation() {
       type: 'success'
     })
   } else {
-    client.value.status = 'REVOKED'
-    toastRef.value?.showToast({
-      title: 'Engine Revoked',
-      message: `${client.value.name} WhatsApp access has been suspended.`,
-      type: 'error'
-    })
+    confirmState.title = 'Revoke WhatsApp Access'
+    confirmState.description = `Are you sure you want to suspend WhatsApp automated booking services for ${client.value.name}?`
+    confirmState.type = 'warning'
+    confirmState.confirmLabel = 'Revoke Access'
+    confirmState.confirmSlug = ''
+    confirmState.onConfirm = () => {
+      client.value.status = 'REVOKED'
+      toastRef.value?.showToast({
+        title: 'Engine Revoked',
+        message: `${client.value.name} WhatsApp access has been suspended.`,
+        type: 'error'
+      })
+    }
+    confirmState.isOpen = true
   }
 }
 
 function deleteClient() {
-  toastRef.value?.showToast({
-    title: 'Tenant Deleted',
-    message: `${client.value.name} has been removed. Returning to clients...`,
-    type: 'error'
-  })
-  setTimeout(() => {
-    router.push('/clients')
-  }, 1200)
+  confirmState.title = `Delete ${client.value.name}?`
+  confirmState.description = 'This action cannot be undone. All conversation histories and tenant configurations will be permanently purged.'
+  confirmState.type = 'delete'
+  confirmState.confirmLabel = 'Delete Tenant'
+  confirmState.confirmSlug = client.value.slug
+  confirmState.onConfirm = () => {
+    toastRef.value?.showToast({
+      title: 'Tenant Deleted',
+      message: `${client.value.name} has been removed. Returning to clients...`,
+      type: 'error'
+    })
+    setTimeout(() => {
+      router.push('/clients')
+    }, 1000)
+  }
+  confirmState.isOpen = true
 }
 </script>
