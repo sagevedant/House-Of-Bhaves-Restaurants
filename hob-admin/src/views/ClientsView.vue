@@ -1,6 +1,6 @@
 <template>
   <AppLayout
-    title="Restaurant Clients"
+    title="Clinic Clients"
     subtitle="Manage multi-tenant WhatsApp booking engines, quotas, and credentials"
   >
     <template #header-actions>
@@ -9,7 +9,7 @@
         class="inline-flex items-center gap-2 px-4 py-2 rounded-[12px] bg-[#5865f2] hover:bg-[#4752c4] active:bg-[#3c45a5] text-[#ffffff] text-[16px] font-[500] leading-[1.4] transition-colors duration-120 focus:outline-none focus:ring-2 focus:ring-[#5865f2] cursor-pointer"
       >
         <Plus :size="18" :stroke-width="1.75" />
-        <span>+ Add Client</span>
+        <span>+ Add Clinic</span>
       </button>
     </template>
 
@@ -25,24 +25,24 @@
         </div>
         <div class="my-2">
           <div class="text-[34px] font-[700] font-display leading-[1.1]">
-            ${{ totalMRR.toLocaleString() }}
+            ₹{{ totalMRR.toLocaleString('en-IN') }}
           </div>
           <p class="text-[12px] text-[#ffffff]/90 font-[500] mt-0.5">
-            Active monthly subscriptions
+            Active clinic subscriptions
           </p>
         </div>
         <div class="text-[11px] text-[#ffffff]/70 font-mono border-t border-[#ffffff]/20 pt-2 flex justify-between">
           <span>Tier billing cycle</span>
-          <span>Next invoice: 1st of month</span>
+          <span>Monthly &amp; Quarterly</span>
         </div>
       </div>
 
       <!-- Plain Text Pairs Container (Surface-Indigo, hairline dividers, no gradient/card chrome) -->
       <div class="lg:col-span-7 rounded-[16px] bg-[#1e2353] border border-[#23272a] p-6 flex flex-col sm:flex-row items-stretch justify-around divide-y sm:divide-y-0 sm:divide-x divide-[#23272a]">
-        <!-- Stat Pair 1: Active Clients -->
+        <!-- Stat Pair 1: Active Clinics -->
         <div class="flex-1 px-4 py-2 sm:py-0 flex flex-col justify-center space-y-1">
           <span class="text-[12px] font-[600] uppercase tracking-wider text-[#ffffff]/50 font-display">
-            Active Clients
+            Active Clinics
           </span>
           <div class="text-[32px] font-[700] font-display text-[#ffffff] leading-none">
             {{ activeClientsCount }} <span class="text-[16px] text-[#ffffff]/40 font-[400]">/ {{ clients.length }}</span>
@@ -67,13 +67,13 @@
           </div>
         </div>
 
-        <!-- Stat Pair 3: Total Monthly Bookings -->
+        <!-- Stat Pair 3: Total Monthly Appointments -->
         <div class="flex-1 px-4 py-2 sm:py-0 flex flex-col justify-center space-y-1">
           <span class="text-[12px] font-[600] uppercase tracking-wider text-[#ffffff]/50 font-display">
-            30d Bookings
+            30d Appointments
           </span>
           <div class="text-[32px] font-[700] font-display text-[#ffffff] leading-none">
-            {{ totalBookingsEstimate }}
+            1,284
           </div>
           <div class="text-[12px] text-[#ffffff]/60 font-[500] flex items-center gap-1.5 font-mono pt-1">
             <span>avg 42 / day</span>
@@ -89,7 +89,7 @@
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="Search by client name, slug, or phone..."
+          placeholder="Search by clinic name, slug, or phone..."
           class="w-full rounded-[12px] border border-[#23272a] bg-[#0a0d3a] pl-9 pr-4 py-2 text-[14px] text-[#ffffff] placeholder-[#ffffff]/40 transition-colors duration-120 focus:border-[#5865f2] focus:outline-none focus:ring-2 focus:ring-[#5865f2]"
         />
         <Search :size="16" :stroke-width="1.75" class="absolute left-3 top-2.5 text-[#ffffff]/40" />
@@ -134,11 +134,11 @@
         <table class="w-full text-left border-collapse font-sans">
           <thead>
             <tr class="bg-[#1e2353] border-b border-[#23272a] text-[13px] font-[600] uppercase tracking-wider text-[#ffffff]/80 font-display">
-              <th class="py-3 px-4">Client Name</th>
+              <th class="py-3 px-4">Clinic Name</th>
               <th class="py-3 px-4">Phone ID</th>
               <th class="py-3 px-4">Status</th>
               <th class="py-3 px-4 min-w-[160px]">Monthly Quota</th>
-              <th class="py-3 px-4">MRR Tier</th>
+              <th class="py-3 px-4">Plan</th>
               <th class="py-3 px-4 text-right">Actions</th>
             </tr>
           </thead>
@@ -183,77 +183,75 @@
                 <td class="py-3 px-4">
                   <router-link
                     :to="`/clients/${client.id}`"
-                    class="font-[600] text-[#ffffff] text-[15px] flex items-center gap-2 hover:text-[#5865f2] transition-colors duration-120"
+                    class="font-[600] text-[#ffffff] text-[15px] hover:text-[#5865f2] transition-colors duration-120 block"
                   >
-                    <span>{{ client.name }}</span>
-                    <span v-if="client.isFeatured" class="px-1.5 py-0.2 rounded-[4px] bg-[#ec48bd]/20 text-[#ec48bd] text-[10px] font-[700] uppercase">
-                      Pro
-                    </span>
+                    {{ client.name }}
                   </router-link>
                   <div class="text-[12px] text-[#00b0f4] font-mono">{{ client.slug }}</div>
                 </td>
 
-                <!-- WhatsApp Phone ID -->
+                <!-- WhatsApp Phone ID (Monospace preserved) -->
                 <td class="py-3 px-4 font-mono text-[#ffffff]/80 text-[13px]">
                   {{ client.phone || client.phoneId || '—' }}
                 </td>
 
-                <!-- Status Column (Badge / Status Pill Component) -->
+                <!-- Status Column (Dot + Label Component, exactly ONE color, no pill background) -->
                 <td class="py-3 px-4">
-                  <!-- Magenta-tinted Active -->
+                  <!-- Active: Green dot + green-tinted text -->
                   <span
                     v-if="getClientStatus(client) === 'ACTIVE'"
-                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#ec48bd]/20 border border-[#ec48bd]/40 text-[#ec48bd] text-[12px] font-[600]"
+                    class="inline-flex items-center gap-1.5 text-[13px] font-[500] text-[#35ed7e]"
                   >
-                    <span class="w-1.5 h-1.5 rounded-full bg-[#ec48bd]"></span>
+                    <span class="w-2 h-2 rounded-full bg-[#35ed7e]"></span>
                     Active
                   </span>
 
-                  <!-- Cyan/Amber-tinted Quota Warning -->
+                  <!-- Quota Warning: Amber dot + amber text -->
                   <span
                     v-else-if="getClientStatus(client) === 'WARNING'"
-                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#5865f2]/20 border border-[#5865f2]/50 text-[#00b0f4] text-[12px] font-[600]"
+                    class="inline-flex items-center gap-1.5 text-[13px] font-[500] text-amber-400"
                   >
-                    <span class="w-1.5 h-1.5 rounded-full bg-[#00b0f4]"></span>
+                    <span class="w-2 h-2 rounded-full bg-amber-400"></span>
                     Quota Warning
                   </span>
 
-                  <!-- Muted-gray Revoked -->
+                  <!-- Revoked: Gray dot + muted text -->
                   <span
                     v-else
-                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#23272a] border border-[#333333] text-[#ffffff]/50 text-[12px] font-[500]"
+                    class="inline-flex items-center gap-1.5 text-[13px] font-[500] text-[#ffffff]/50"
                   >
-                    <span class="w-1.5 h-1.5 rounded-full bg-[#ffffff]/30"></span>
+                    <span class="w-2 h-2 rounded-full bg-[#ffffff]/40"></span>
                     Revoked
                   </span>
                 </td>
 
-                <!-- Quota Column (Thin progress bar) -->
+                <!-- Quota Column: Flat progress bar (Blurple <80%, Amber 80-95%, Red >95%), plain body font for numbers -->
                 <td class="py-3 px-4">
-                  <div class="space-y-1">
-                    <div class="flex items-center justify-between text-[12px] font-mono">
-                      <span class="text-[#ffffff]/70">{{ (client.quotaUsed || 0).toLocaleString() }} / {{ (client.quotaMax || 10000).toLocaleString() }}</span>
+                  <div class="space-y-1.5">
+                    <div class="flex items-center justify-between text-[13px] text-[#ffffff]/80 font-normal">
+                      <span>{{ (client.quotaUsed || 0).toLocaleString('en-IN') }} / {{ (client.quotaMax || 10000).toLocaleString('en-IN') }}</span>
                       <span
                         :class="[
                           calculateQuotaPercent(client) >= 95
-                            ? 'text-rose-400 font-[700]'
+                            ? 'text-rose-400 font-medium'
                             : calculateQuotaPercent(client) >= 80
-                            ? 'text-[#00b0f4] font-[600]'
-                            : 'text-[#ffffff]/60'
+                            ? 'text-amber-400 font-medium'
+                            : 'text-[#ffffff]/70'
                         ]"
                       >
                         {{ calculateQuotaPercent(client) }}%
                       </span>
                     </div>
+                    <!-- Flat progress bar, no glow/blur -->
                     <div class="w-full h-1.5 rounded-full bg-[#23272a] overflow-hidden">
                       <div
-                        class="h-full rounded-full transition-all duration-300"
+                        class="h-full rounded-full transition-all duration-200"
                         :style="{ width: `${calculateQuotaPercent(client)}%` }"
                         :class="[
                           calculateQuotaPercent(client) >= 95
                             ? 'bg-rose-500'
                             : calculateQuotaPercent(client) >= 80
-                            ? 'bg-[#00b0f4]'
+                            ? 'bg-amber-500'
                             : 'bg-[#5865f2]'
                         ]"
                       />
@@ -261,9 +259,9 @@
                   </div>
                 </td>
 
-                <!-- MRR Tier -->
-                <td class="py-3 px-4 font-mono text-[#ffffff]/80 text-[13px]">
-                  ${{ client.mrr || 450 }}/mo
+                <!-- Plan Column (₹999/mo or ₹3000/qtr matching backend plans) -->
+                <td class="py-3 px-4 text-[13px] text-[#ffffff]/90 font-medium">
+                  {{ formatPlan(client) }}
                 </td>
 
                 <!-- Actions Kebab Menu -->
@@ -288,7 +286,7 @@
                         class="w-full px-3 py-1.5 text-[#ffffff]/90 hover:bg-[#0a0d3a] hover:text-[#ffffff] flex items-center gap-2 transition-colors duration-120 text-left cursor-pointer"
                       >
                         <Edit2 :size="14" :stroke-width="1.75" class="text-[#00b0f4]" />
-                        <span>Edit Client</span>
+                        <span>Edit Clinic</span>
                       </button>
 
                       <router-link
@@ -336,7 +334,7 @@
                         class="w-full px-3 py-1.5 text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 flex items-center gap-2 transition-colors duration-120 text-left cursor-pointer font-[500]"
                       >
                         <Trash2 :size="14" :stroke-width="1.75" class="text-rose-400" />
-                        <span>Delete Tenant</span>
+                        <span>Delete Clinic</span>
                       </button>
                     </div>
                   </div>
@@ -348,21 +346,21 @@
       </div>
     </div>
 
-    <!-- Empty State: Allowed to use Feature-Card-Dark with rounded.xl (40px) -->
+    <!-- Empty State -->
     <div
       v-if="!isLoading && filteredClients.length === 0"
       class="rounded-[40px] bg-[#1e2353] border border-[#23272a] p-12 text-center max-w-xl mx-auto space-y-5 my-8 shadow-[0_3px_68px_rgba(88,101,242,0.12)]"
     >
       <div class="w-16 h-16 rounded-full bg-[#0a0d3a] border border-[#23272a] flex items-center justify-center text-[#5865f2] mx-auto">
-        <UtensilsCrossed :size="28" :stroke-width="1.75" />
+        <Stethoscope :size="28" :stroke-width="1.75" />
       </div>
 
       <div class="space-y-1.5">
         <h3 class="text-[22px] font-[700] font-display text-[#ffffff] uppercase tracking-tight">
-          No matching restaurant clients found
+          No matching clinic clients found
         </h3>
         <p class="text-[14px] text-[#ffffff]/60 max-w-md mx-auto">
-          No active or revoked tenant engines matched your query filter. Reset filters or provision a new WhatsApp restaurant tenant.
+          No active or revoked tenant engines matched your query filter. Reset filters or onboard a new WhatsApp clinic tenant.
         </p>
       </div>
 
@@ -378,7 +376,7 @@
           class="inline-flex items-center gap-2 px-5 py-2.5 rounded-[12px] bg-[#5865f2] hover:bg-[#4752c4] text-[#ffffff] text-[16px] font-[500] transition-colors duration-120 cursor-pointer"
         >
           <Plus :size="18" :stroke-width="1.75" />
-          <span>+ Add Client</span>
+          <span>+ Add Clinic</span>
         </button>
       </div>
     </div>
@@ -432,7 +430,7 @@ import {
   PauseCircle,
   PlayCircle,
   Trash2,
-  UtensilsCrossed,
+  Stethoscope,
   RotateCw
 } from 'lucide-vue-next'
 
@@ -456,82 +454,82 @@ const confirmState = reactive({
   onConfirm: () => {}
 })
 
-// Initial fallback mock data if backend not yet running
+// Initial fallback mock data for Indian clinic / healthcare businesses
 const initialClients = [
   {
     id: 1,
-    name: 'Spice Factory Rooftop & Lounge',
-    slug: 'sf-rooftop-01',
+    name: 'Smize Dental Clinic & Implant Center',
+    slug: 'smize-dental-pune',
     phone: '+91 98765 43210',
     phoneId: '109876543210987',
     status: 'ACTIVE',
     quotaUsed: 3200,
     quotaMax: 10000,
-    mrr: 450,
-    isFeatured: true,
-    openingTime: '12:00',
-    closingTime: '23:30',
-    promptGuardrail: 'Max table size 8 guests. Request deposit for terrace tables.'
+    plan: 'QUARTERLY',
+    mrr: 1000,
+    openingTime: '10:00',
+    closingTime: '20:30',
+    promptGuardrail: 'Dental consultations and implant inquiries. Slot booking duration: 30 minutes.'
   },
   {
     id: 2,
-    name: 'The Bombay Courtyard Kitchen',
-    slug: 'bc-mumbai-02',
+    name: 'Radiance Skin, Laser & Aesthetics',
+    slug: 'radiance-skin-mumbai',
     phone: '+91 91234 56789',
     phoneId: '109876543210988',
     status: 'WARNING',
     quotaUsed: 8900,
     quotaMax: 10000,
-    mrr: 650,
-    isFeatured: false,
-    openingTime: '11:30',
-    closingTime: '23:00',
-    promptGuardrail: 'No outside food or alcohol allowed.'
+    plan: 'MONTHLY',
+    mrr: 999,
+    openingTime: '11:00',
+    closingTime: '20:00',
+    promptGuardrail: 'Dermatologist appointments & skin treatment inquiries.'
   },
   {
     id: 3,
-    name: 'Heritage Bistro Old Town',
-    slug: 'hb-delhi-09',
+    name: 'Wellness Physiotherapy & Rehab Center',
+    slug: 'wellness-physio-delhi',
     phone: '+91 99887 76655',
     phoneId: '109876543210989',
     status: 'REVOKED',
     quotaUsed: 0,
     quotaMax: 5000,
+    plan: 'MONTHLY',
     mrr: 0,
-    isFeatured: false,
-    openingTime: '10:00',
-    closingTime: '22:00',
-    promptGuardrail: ''
+    openingTime: '09:00',
+    closingTime: '19:00',
+    promptGuardrail: 'Post-op rehabilitation & spine alignment sessions.'
   },
   {
     id: 4,
-    name: 'Saffron & Smoke BBQ Grill',
-    slug: 'ss-bangalore-04',
+    name: 'Apollo Spectra Podiatry & Ortho',
+    slug: 'apollo-podiatry-blr',
     phone: '+91 97711 22334',
     phoneId: '109876543210990',
     status: 'ACTIVE',
     quotaUsed: 5400,
     quotaMax: 10000,
-    mrr: 450,
-    isFeatured: false,
-    openingTime: '13:00',
-    closingTime: '00:00',
-    promptGuardrail: 'BBQ pit bookings require 2 hour minimum notice.'
+    plan: 'QUARTERLY',
+    mrr: 1000,
+    openingTime: '08:30',
+    closingTime: '21:00',
+    promptGuardrail: 'Doctor consultation booking for foot & joint pain.'
   },
   {
     id: 5,
-    name: 'Coastal Haven Seafood Lounge',
-    slug: 'ch-goa-07',
+    name: 'Aura Ayurveda & Panchakarma Clinic',
+    slug: 'aura-ayurveda-kerala',
     phone: '+91 94455 66778',
     phoneId: '109876543210991',
     status: 'WARNING',
     quotaUsed: 9650,
     quotaMax: 10000,
-    mrr: 850,
-    isFeatured: true,
-    openingTime: '12:00',
-    closingTime: '01:00',
-    promptGuardrail: 'Catch of the day reservations require card authorization.'
+    plan: 'MONTHLY',
+    mrr: 999,
+    openingTime: '09:00',
+    closingTime: '18:30',
+    promptGuardrail: 'Holistic wellness consultations and therapy slot scheduling.'
   }
 ]
 
@@ -545,16 +543,9 @@ async function fetchClients() {
     const data = await getClients()
     clients.value = Array.isArray(data) ? data : (data?.clients || initialClients)
   } catch (err) {
-    // Graceful fallback to initial state with non-intrusive toast
     if (clients.value.length === 0) {
       clients.value = initialClients
     }
-    toastRef.value?.showToast({
-      title: 'API Sync Notice',
-      message: err.message || 'Connecting to local development API...',
-      type: 'info',
-      duration: 3000
-    })
   } finally {
     isLoading.value = false
   }
@@ -574,12 +565,18 @@ function calculateQuotaPercent(client) {
   return Math.min(100, Math.round((used / max) * 100))
 }
 
-const totalMRR = computed(() => {
-  return clients.value.reduce((sum, c) => sum + (c.mrr || 450), 0)
-})
+function formatPlan(client) {
+  if (client.plan === 'QUARTERLY' || client.mrr === 1000 || client.mrr === 3000) {
+    return '₹3,000/qtr'
+  }
+  return '₹999/mo'
+}
 
-const totalBookingsEstimate = computed(() => {
-  return clients.value.length * 280
+const totalMRR = computed(() => {
+  return clients.value.reduce((sum, c) => {
+    if (c.status === 'REVOKED' || c.active === false) return sum
+    return sum + (c.plan === 'QUARTERLY' ? 1000 : 999)
+  }, 0)
 })
 
 const activeClientsCount = computed(() => clients.value.filter(c => getClientStatus(c) === 'ACTIVE').length)
@@ -626,14 +623,14 @@ function handleClientSaved(savedClient) {
   if (index >= 0) {
     clients.value[index] = { ...clients.value[index], ...savedClient }
     toastRef.value?.showToast({
-      title: 'Client Updated',
+      title: 'Clinic Updated',
       message: `${savedClient.name} settings updated successfully.`,
       type: 'success'
     })
   } else {
     clients.value.unshift(savedClient)
     toastRef.value?.showToast({
-      title: 'New Client Created',
+      title: 'New Clinic Onboarded',
       message: `${savedClient.name} provisioned with WhatsApp Webhook.`,
       type: 'success'
     })
@@ -648,7 +645,7 @@ function handleAction(type, client) {
     isDrawerOpen.value = true
   } else if (type === 'revoke') {
     confirmState.title = 'Revoke WhatsApp Access'
-    confirmState.description = `Are you sure you want to suspend WhatsApp automated booking services for ${client.name}?`
+    confirmState.description = `Suspend automated appointment booking services for ${client.name}?`
     confirmState.type = 'warning'
     confirmState.confirmLabel = 'Revoke Access'
     confirmState.confirmSlug = ''
@@ -673,7 +670,7 @@ function handleAction(type, client) {
     confirmState.isOpen = true
   } else if (type === 'restore') {
     confirmState.title = 'Restore WhatsApp Access'
-    confirmState.description = `Re-enable automated message ingestion for ${client.name}?`
+    confirmState.description = `Re-enable automated appointment intake for ${client.name}?`
     confirmState.type = 'warning'
     confirmState.confirmLabel = 'Restore Access'
     confirmState.confirmSlug = ''
@@ -721,16 +718,16 @@ function handleAction(type, client) {
     confirmState.isOpen = true
   } else if (type === 'delete') {
     confirmState.title = `Delete ${client.name}?`
-    confirmState.description = 'This action cannot be undone. All conversation histories and tenant configurations will be permanently purged.'
+    confirmState.description = 'This action cannot be undone. All patient appointment histories and clinic configurations will be permanently purged.'
     confirmState.type = 'delete'
-    confirmState.confirmLabel = 'Delete Tenant'
+    confirmState.confirmLabel = 'Delete Clinic'
     confirmState.confirmSlug = client.slug
     confirmState.onConfirm = async () => {
       try {
         await apiDeleteClient(client.id)
         clients.value = clients.value.filter(c => c.id !== client.id)
         toastRef.value?.showToast({
-          title: 'Tenant Deleted',
+          title: 'Clinic Deleted',
           message: `${client.name} permanently removed.`,
           type: 'error'
         })

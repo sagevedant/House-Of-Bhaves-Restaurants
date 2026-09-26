@@ -1,7 +1,7 @@
 <template>
   <AppLayout
-    :title="client.name || 'Client Details'"
-    subtitle="Tenant configuration, live bookings, and Meta WhatsApp integration"
+    :title="client.name || 'Clinic Details'"
+    subtitle="Tenant configuration, appointment logs, and Meta WhatsApp integration"
   >
     <!-- Top Action Bar -->
     <template #header-actions>
@@ -10,7 +10,7 @@
         class="inline-flex items-center gap-1.5 px-3 py-2 rounded-[12px] bg-[#0a0d3a] hover:bg-[#23272a] text-[#ffffff] text-[14px] font-[500] border border-[#23272a] transition-colors duration-120"
       >
         <ArrowLeft :size="16" :stroke-width="1.75" />
-        <span>Back to Clients</span>
+        <span>Back to Clinics</span>
       </router-link>
 
       <button
@@ -18,7 +18,7 @@
         class="inline-flex items-center gap-1.5 px-4 py-2 rounded-[12px] bg-[#5865f2] hover:bg-[#4752c4] text-[#ffffff] text-[15px] font-[500] transition-colors duration-120 cursor-pointer"
       >
         <Edit2 :size="16" :stroke-width="1.75" />
-        <span>Edit Client</span>
+        <span>Edit Clinic</span>
       </button>
     </template>
 
@@ -38,23 +38,23 @@
 
           <span
             v-if="clientStatus === 'ACTIVE'"
-            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#ec48bd]/20 border border-[#ec48bd]/40 text-[#ec48bd] text-[12px] font-[600]"
+            class="inline-flex items-center gap-1.5 text-[14px] font-[500] text-[#35ed7e]"
           >
-            <span class="w-1.5 h-1.5 rounded-full bg-[#ec48bd]"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-[#35ed7e]"></span>
             Active
           </span>
           <span
             v-else-if="clientStatus === 'WARNING'"
-            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#5865f2]/20 border border-[#5865f2]/50 text-[#00b0f4] text-[12px] font-[600]"
+            class="inline-flex items-center gap-1.5 text-[14px] font-[500] text-amber-400"
           >
-            <span class="w-1.5 h-1.5 rounded-full bg-[#00b0f4]"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
             Quota Warning
           </span>
           <span
             v-else
-            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-[50px] bg-[#23272a] border border-[#333333] text-[#ffffff]/50 text-[12px] font-[500]"
+            class="inline-flex items-center gap-1.5 text-[14px] font-[500] text-[#ffffff]/50"
           >
-            <span class="w-1.5 h-1.5 rounded-full bg-[#ffffff]/30"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-[#ffffff]/40"></span>
             Revoked
           </span>
         </div>
@@ -64,14 +64,14 @@
           <span>•</span>
           <span>Phone: <span class="text-[#ffffff]/90">{{ client.phone || client.phoneId }}</span></span>
           <span>•</span>
-          <span>MRR: <span class="text-[#35ed7e]">${{ client.mrr || 450 }}/mo</span></span>
+          <span>Plan: <span class="text-[#35ed7e]">{{ planLabel }}</span></span>
         </div>
       </div>
     </div>
 
     <!-- Main 2-Column Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      <!-- LEFT COLUMN (7 Cols): Settings Summary + Recent Bookings Data Table -->
+      <!-- LEFT COLUMN (7 Cols): Settings Summary + Recent Appointments Data Table -->
       <div class="lg:col-span-7 space-y-6">
         <!-- Settings Summary -->
         <div class="rounded-[16px] bg-[#1e2353] border border-[#23272a] p-6 space-y-5">
@@ -79,17 +79,17 @@
             <div class="flex items-center gap-2">
               <SlidersHorizontal :size="16" :stroke-width="1.75" class="text-[#5865f2]" />
               <h2 class="text-[18px] font-[700] text-[#ffffff] font-display uppercase tracking-tight">
-                Engine &amp; Business Rules
+                Clinic Rules &amp; Consultation Timings
               </h2>
             </div>
-            <span class="text-[11px] font-mono text-[#ffffff]/40">Last synced recently</span>
+            <span class="text-[11px] font-mono text-[#ffffff]/40">Active Integration</span>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[14px]">
             <div class="rounded-[12px] bg-[#0a0d3a] border border-[#23272a] p-3.5 space-y-1">
-              <span class="text-[11px] font-[600] uppercase tracking-wider text-[#ffffff]/40 font-display">Operating Hours</span>
-              <div class="font-[600] text-[#ffffff] font-mono">{{ client.openingTime || '12:00' }} — {{ client.closingTime || '23:30' }}</div>
-              <p class="text-[11px] text-[#ffffff]/50">Outside hours: AI collects callback details</p>
+              <span class="text-[11px] font-[600] uppercase tracking-wider text-[#ffffff]/40 font-display">OPD / Clinic Hours</span>
+              <div class="font-[600] text-[#ffffff] font-mono">{{ client.openingTime || '10:00' }} — {{ client.closingTime || '20:30' }}</div>
+              <p class="text-[11px] text-[#ffffff]/50">Off-hours: WhatsApp bot collects patient callback details</p>
             </div>
 
             <div class="rounded-[12px] bg-[#0a0d3a] border border-[#23272a] p-3.5 space-y-1">
@@ -101,20 +101,20 @@
 
           <!-- Prompt Guardrail -->
           <div class="rounded-[12px] bg-[#0a0d3a] border border-[#23272a] p-4 space-y-1.5">
-            <span class="text-[11px] font-[600] uppercase tracking-wider text-[#ffffff]/40 font-display">Custom AI Bot Guardrails</span>
+            <span class="text-[11px] font-[600] uppercase tracking-wider text-[#ffffff]/40 font-display">Custom AI Bot Instructions</span>
             <p class="text-[13px] text-[#ffffff]/80 leading-[1.5]">
-              {{ client.promptGuardrail || 'No custom guardrails configured. Using platform baseline.' }}
+              {{ client.promptGuardrail || 'Doctor consultation and appointment scheduling bot.' }}
             </p>
           </div>
         </div>
 
-        <!-- Recent Bookings Data-Table -->
+        <!-- Recent Appointments Data-Table -->
         <div class="rounded-[16px] bg-[#1e2353] border border-[#23272a] p-0 overflow-hidden">
           <div class="p-5 border-b border-[#23272a] flex items-center justify-between">
             <div class="flex items-center gap-2">
               <Calendar :size="16" :stroke-width="1.75" class="text-[#00b0f4]" />
               <h2 class="text-[18px] font-[700] text-[#ffffff] font-display uppercase tracking-tight">
-                Recent WhatsApp Bookings
+                Recent WhatsApp Appointments
               </h2>
             </div>
             <button
@@ -131,11 +131,11 @@
             <table class="w-full text-left border-collapse font-sans">
               <thead>
                 <tr class="bg-[#0a0d3a]/60 border-b border-[#23272a] text-[12px] font-[600] uppercase tracking-wider text-[#ffffff]/70 font-display">
-                  <th class="py-2.5 px-4">Guest Name / Phone</th>
-                  <th class="py-2.5 px-4">Party</th>
-                  <th class="py-2.5 px-4">Slot Time</th>
+                  <th class="py-2.5 px-4">Patient Name / Phone</th>
+                  <th class="py-2.5 px-4">Party Size</th>
+                  <th class="py-2.5 px-4">Appointment Slot</th>
                   <th class="py-2.5 px-4">Status</th>
-                  <th class="py-2.5 px-4 text-right">Created</th>
+                  <th class="py-2.5 px-4 text-right">Booked</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#23272a] text-[13px]">
@@ -155,14 +155,14 @@
                     class="hover:bg-[#0a0d3a]/40 transition-colors duration-120"
                   >
                     <td class="py-2.5 px-4">
-                      <div class="font-[600] text-[#ffffff]">{{ booking.guestName || booking.name || 'Guest' }}</div>
+                      <div class="font-[600] text-[#ffffff]">{{ booking.guestName || booking.name || 'Patient' }}</div>
                       <div class="text-[11px] text-[#ffffff]/50 font-mono">{{ booking.phone || booking.customerPhone }}</div>
                     </td>
                     <td class="py-2.5 px-4 font-mono text-[#ffffff]/90">
-                      {{ booking.guests || booking.partySize || 2 }} guests
+                      {{ booking.guests || booking.partySize || 1 }} patient(s)
                     </td>
                     <td class="py-2.5 px-4 font-mono text-[#00b0f4]">
-                      {{ booking.slotTime || booking.bookingDate || 'Today, 8:00 PM' }}
+                      {{ booking.slotTime || booking.bookingDate || 'Today, 5:30 PM' }}
                     </td>
                     <td class="py-2.5 px-4">
                       <span
@@ -185,7 +185,7 @@
                 <template v-else>
                   <tr>
                     <td colspan="5" class="py-6 text-center text-[#ffffff]/50 text-[13px]">
-                      No recent bookings received yet for this tenant engine.
+                      No recent appointments received yet for this clinic engine.
                     </td>
                   </tr>
                 </template>
@@ -208,11 +208,11 @@
 
           <div class="space-y-1">
             <div class="text-[36px] font-[800] font-display leading-[1.05]">
-              {{ (client.quotaUsed || 0).toLocaleString() }}
-              <span class="text-[18px] text-[#ffffff]/70 font-[400]">/ {{ (client.quotaMax || 10000).toLocaleString() }}</span>
+              {{ (client.quotaUsed || 0).toLocaleString('en-IN') }}
+              <span class="text-[18px] text-[#ffffff]/70 font-[400]">/ {{ (client.quotaMax || 10000).toLocaleString('en-IN') }}</span>
             </div>
             <p class="text-[12px] text-[#ffffff]/90 font-[500]">
-              {{ quotaPercent }}% of allocated WhatsApp messages consumed
+              {{ quotaPercent }}% of allocated WhatsApp patient messages consumed
             </p>
           </div>
 
@@ -231,7 +231,7 @@
 
           <div class="text-[11px] text-[#ffffff]/80 font-mono border-t border-[#ffffff]/20 pt-2 flex items-center justify-between">
             <span>Resets on 1st of month</span>
-            <span>Billing tier: ${{ client.mrr || 450 }}/mo</span>
+            <span>Plan: {{ planLabel }}</span>
           </div>
         </div>
 
@@ -286,7 +286,7 @@
             <div class="flex items-center justify-between">
               <div>
                 <div class="text-[14px] font-[600] text-[#ffffff]">
-                  {{ clientStatus === 'REVOKED' ? 'Restore Client Engine' : 'Revoke Client Access' }}
+                  {{ clientStatus === 'REVOKED' ? 'Restore Clinic Engine' : 'Revoke Clinic Access' }}
                 </div>
                 <p class="text-[12px] text-[#ffffff]/60 mt-0.5 leading-[1.4]">
                   {{ clientStatus === 'REVOKED'
@@ -316,7 +316,7 @@
               class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-[12px] border border-rose-800/60 text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 text-[14px] font-[600] transition-colors duration-120 cursor-pointer"
             >
               <Trash2 :size="15" :stroke-width="1.75" />
-              <span>Delete Client Permanently</span>
+              <span>Delete Clinic Permanently</span>
             </button>
           </div>
         </div>
@@ -384,18 +384,18 @@ const isLoadingBookings = ref(false)
 
 const client = ref({
   id: route.params.id || 1,
-  name: 'Spice Factory Rooftop & Lounge',
-  slug: 'sf-rooftop-01',
+  name: 'Smize Dental Clinic & Implant Center',
+  slug: 'smize-dental-pune',
   phone: '+91 98765 43210',
   phoneId: '109876543210987',
   status: 'ACTIVE',
   quotaUsed: 3200,
   quotaMax: 10000,
-  mrr: 450,
-  openingTime: '12:00',
-  closingTime: '23:30',
-  promptGuardrail: 'Max table size 8 guests. Request deposit for terrace tables.',
-  isFeatured: true
+  plan: 'QUARTERLY',
+  mrr: 1000,
+  openingTime: '10:00',
+  closingTime: '20:30',
+  promptGuardrail: 'Dental consultations and implant inquiries. Slot booking duration: 30 minutes.'
 })
 
 const recentBookings = ref([
@@ -403,8 +403,8 @@ const recentBookings = ref([
     id: 'b-101',
     guestName: 'Ananya Verma',
     phone: '+91 98111 22334',
-    guests: 4,
-    slotTime: 'Today, 8:00 PM',
+    guests: 1,
+    slotTime: 'Today, 5:00 PM',
     status: 'CONFIRMED',
     createdAt: '12m ago'
   },
@@ -413,7 +413,7 @@ const recentBookings = ref([
     guestName: 'Rohan Mehta',
     phone: '+91 98222 33445',
     guests: 2,
-    slotTime: 'Today, 9:30 PM',
+    slotTime: 'Today, 6:30 PM',
     status: 'CONFIRMED',
     createdAt: '45m ago'
   },
@@ -421,8 +421,8 @@ const recentBookings = ref([
     id: 'b-103',
     guestName: 'Siddharth Rao',
     phone: '+91 98333 44556',
-    guests: 6,
-    slotTime: 'Tomorrow, 1:30 PM',
+    guests: 1,
+    slotTime: 'Tomorrow, 11:30 AM',
     status: 'PENDING',
     createdAt: '2h ago'
   },
@@ -430,8 +430,8 @@ const recentBookings = ref([
     id: 'b-104',
     guestName: 'Pooja Iyer',
     phone: '+91 98444 55667',
-    guests: 3,
-    slotTime: 'Tomorrow, 8:30 PM',
+    guests: 1,
+    slotTime: 'Tomorrow, 4:30 PM',
     status: 'CONFIRMED',
     createdAt: '5h ago'
   }
@@ -490,6 +490,13 @@ const clientStatus = computed(() => {
   return 'ACTIVE'
 })
 
+const planLabel = computed(() => {
+  if (client.value.plan === 'QUARTERLY' || client.value.mrr === 1000 || client.value.mrr === 3000) {
+    return '₹3,000/qtr'
+  }
+  return '₹999/mo'
+})
+
 const quotaPercent = computed(() => {
   const used = client.value.quotaUsed || 0
   const max = client.value.quotaMax || 10000
@@ -508,7 +515,7 @@ function openEditDrawer() {
 function handleClientUpdated(updated) {
   client.value = { ...client.value, ...updated }
   toastRef.value?.showToast({
-    title: 'Client Updated',
+    title: 'Clinic Updated',
     message: `${client.value.name} configuration saved.`,
     type: 'success'
   })
@@ -542,7 +549,7 @@ function rotateToken() {
 function toggleRevocation() {
   if (clientStatus.value === 'REVOKED') {
     confirmState.title = 'Restore WhatsApp Access'
-    confirmState.description = `Re-enable automated message ingestion for ${client.value.name}?`
+    confirmState.description = `Re-enable automated appointment intake for ${client.value.name}?`
     confirmState.type = 'warning'
     confirmState.confirmLabel = 'Restore Access'
     confirmState.confirmSlug = ''
@@ -567,7 +574,7 @@ function toggleRevocation() {
     confirmState.isOpen = true
   } else {
     confirmState.title = 'Revoke WhatsApp Access'
-    confirmState.description = `Are you sure you want to suspend WhatsApp automated booking services for ${client.value.name}?`
+    confirmState.description = `Are you sure you want to suspend WhatsApp automated appointment services for ${client.value.name}?`
     confirmState.type = 'warning'
     confirmState.confirmLabel = 'Revoke Access'
     confirmState.confirmSlug = ''
@@ -595,16 +602,16 @@ function toggleRevocation() {
 
 function deleteClient() {
   confirmState.title = `Delete ${client.value.name}?`
-  confirmState.description = 'This action cannot be undone. All conversation histories and tenant configurations will be permanently purged.'
+  confirmState.description = 'This action cannot be undone. All patient appointment histories and clinic configurations will be permanently purged.'
   confirmState.type = 'delete'
-  confirmState.confirmLabel = 'Delete Tenant'
+  confirmState.confirmLabel = 'Delete Clinic'
   confirmState.confirmSlug = client.value.slug
   confirmState.onConfirm = async () => {
     try {
       await apiDeleteClient(client.value.id)
       toastRef.value?.showToast({
-        title: 'Tenant Deleted',
-        message: `${client.value.name} has been removed. Returning to clients...`,
+        title: 'Clinic Deleted',
+        message: `${client.value.name} has been removed. Returning to clinics...`,
         type: 'error'
       })
       setTimeout(() => {
