@@ -27,9 +27,8 @@ router.get('/', (req, res) => {
  * Verifies Meta's X-Hub-Signature-256 header using HMAC-SHA256 of the raw request body.
  */
 function verifyMetaSignature(req: Request): boolean {
-  const secret = process.env.META_APP_SECRET || config.metaAppSecret;
+  const secret = config.metaAppSecret;
   if (!secret) {
-    console.error('❌ [WEBHOOK AUTH] META_APP_SECRET not configured.');
     return false;
   }
 
@@ -40,7 +39,7 @@ function verifyMetaSignature(req: Request): boolean {
 
   const rawBody = req.rawBody;
   if (!rawBody) {
-    console.error('❌ [WEBHOOK AUTH] Raw body not captured — check express.json verify hook in index.js');
+    console.error('❌ [WEBHOOK AUTH] Raw body not captured — check express.json verify hook in index.ts');
     return false;
   }
 
@@ -53,18 +52,13 @@ function verifyMetaSignature(req: Request): boolean {
 }
 
 router.post('/', (req, res) => {
-  const isEnforced = process.env.ENFORCE_WEBHOOK_SIGNATURE === 'true' || config.enforceWebhookSignature;
-
-  if (isEnforced) {
-    if (!verifyMetaSignature(req)) {
-      console.warn('🚫 [WEBHOOK AUTH] Rejected POST with invalid/missing X-Hub-Signature-256.');
-      res.sendStatus(401);
-      return;
-    }
-    console.log('\n📩 [WEBHOOK POST RECEIVED - signature verified]');
-  } else {
-    console.log('\n📩 [WEBHOOK POST RECEIVED - signature verification bypassed (ENFORCE_WEBHOOK_SIGNATURE is disabled)]');
+  if (!verifyMetaSignature(req)) {
+    console.warn('🚫 [WEBHOOK AUTH] Rejected POST /webhook: invalid or missing X-Hub-Signature-256 signature.');
+    res.status(401).json({ error: 'Unauthorized: Invalid webhook signature' });
+    return;
   }
+
+  console.log('\n📩 [WEBHOOK POST RECEIVED - signature verified]');
 
   // Respond immediately to acknowledge receipt (<5 seconds SLA for Meta)
   res.status(200).send('EVENT_RECEIVED');

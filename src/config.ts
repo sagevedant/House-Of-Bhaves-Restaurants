@@ -42,6 +42,15 @@ if (!process.env.WEBHOOK_VERIFY_TOKEN || !process.env.WEBHOOK_VERIFY_TOKEN.trim(
   process.exit(1);
 }
 
+if (!process.env.META_APP_SECRET || !process.env.META_APP_SECRET.trim()) {
+  console.error(
+    `\n❌ [FATAL CONFIG ERROR] Missing META_APP_SECRET in .env.\n` +
+    `   Meta App Secret is required for HMAC-SHA256 signature verification of inbound webhooks.\n` +
+    `   Find your App Secret in Meta App Dashboard -> App settings -> Basic.\n`
+  );
+  process.exit(1);
+}
+
 export const config = {
   PORT: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
   tursoDatabaseUrl: requireEnv('TURSO_DATABASE_URL'),
@@ -50,9 +59,7 @@ export const config = {
   metaApiBase: 'https://graph.facebook.com/v21.0',
   // Agency Tech Provider App Credentials
   metaAppId: process.env.META_APP_ID || '',
-  // Security & Webhook Signature Enforcement
-  enforceWebhookSignature: process.env.ENFORCE_WEBHOOK_SIGNATURE === 'true',
-  metaAppSecret: process.env.META_APP_SECRET || '', // Required for webhook HMAC & server-side token exchange
+  metaAppSecret: requireEnv('META_APP_SECRET'), // Required for webhook HMAC & server-side token exchange
   metaEmbeddedSignupConfigId: process.env.META_EMBEDDED_SIGNUP_CONFIG_ID || process.env.META_CONFIG_ID || '',
   metaSystemUserAccessToken: process.env.META_SYSTEM_USER_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN || '',
   // Legacy / Default WhatsApp Credentials (used as fallback or in development)
@@ -71,22 +78,13 @@ export const config = {
   adminFrontendOrigin: process.env.ADMIN_FRONTEND_ORIGIN || 'http://localhost:5173',
 };
 
-if (!config.enforceWebhookSignature) {
-  console.warn('⚠️ Webhook signature verification is DISABLED — do not use in production');
-}
+console.log('🔒 [WEBHOOK AUTH] Webhook signature verification is ACTIVE (HMAC-SHA256 enforcement enabled).');
 
 if (!config.mockWhatsApp && (!config.metaAccessToken || !config.whatsappPhoneNumberId)) {
   console.warn(
     '⚠️ [CONFIG WARNING] META_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID not set and ' +
     'MOCK_WHATSAPP is not "true". Per-client tokens in the DB will be required for ' +
     'every send, or outbound messages will fail loudly (not silently) at send time.'
-  );
-}
-
-if (config.enforceWebhookSignature && !config.metaAppSecret) {
-  console.warn(
-    '⚠️ [CONFIG WARNING] ENFORCE_WEBHOOK_SIGNATURE is "true" but META_APP_SECRET is not set — ' +
-    'all inbound webhook requests will be rejected (401).'
   );
 }
 
