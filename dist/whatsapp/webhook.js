@@ -63,13 +63,16 @@ router.post('/', (req, res) => {
     // Respond immediately to acknowledge receipt (<5 seconds SLA for Meta)
     res.status(200).send('EVENT_RECEIVED');
     const body = req.body;
+    if (config_1.config.debugVerboseLogging) {
+        console.log('📩 [WEBHOOK RAW PAYLOAD]:', JSON.stringify(body, null, 2));
+    }
     // Async processing
     setImmediate(async () => {
         try {
             const parsedWebhooks = (0, parser_1.parseWebhookPayload)(body);
-            console.log(`🔍 [WEBHOOK PARSER]: Found ${parsedWebhooks.length} webhook groups`);
+            console.log(`🔍 [WEBHOOK PARSER]: Processed ${parsedWebhooks.length} webhook group(s)`);
             for (const webhook of parsedWebhooks) {
-                console.log(`📱 [WEBHOOK PHONE ID]: ${webhook.phoneNumberId} with ${webhook.events.length} events`);
+                console.log(`📱 [WEBHOOK PHONE ID]: ${webhook.phoneNumberId} (${webhook.events.length} event(s))`);
                 for (const event of webhook.events) {
                     try {
                         // Record 24-hour Free Customer Service Window timestamp

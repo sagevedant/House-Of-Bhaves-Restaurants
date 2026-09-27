@@ -1,5 +1,8 @@
 import 'dotenv/config';
 import express from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import { config } from './config';
 import { db, initializeDatabase } from './db/connection';
@@ -29,19 +32,62 @@ import {
 
 const app = express();
 
+// 1. Baseline HTTP Security Headers (Global)
+app.use(helmet({
+  contentSecurityPolicy: false, // Allows inline scripts/styles for server-rendered HTML views
+}));
+
+// 2. CORS configuration restricted to ADMIN_FRONTEND_ORIGIN (Only applied to /api/admin/*)
+const allowedOrigins = config.adminFrontendOrigin
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const adminCors = cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g. server-to-server or curl) or matching allowed origins
+    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS blocked for origin: ${origin}`));
+    }
+  },
+  credentials: true,
+});
+app.use('/api/admin', adminCors);
+
+// 3. Rate Limiters
+// Meta webhook rate limiter: 100 requests/minute per IP (respects Meta retry burst behavior)
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many webhook requests from this IP, please try again after a minute.' },
+});
+
+// Stricter API rate limiter: 20 requests/minute per IP for sensitive operations
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please slow down.' },
+});
+
 app.use(cookieParser());
 
 // FIX (critical): capture the raw request body on the webhook route so
 // webhook.ts can verify Meta's X-Hub-Signature-256 HMAC. Only the /webhook
 // path needs this; other routes use plain json parsing.
-app.use('/webhook', express.json({
+app.use('/webhook', webhookLimiter, express.json({
   verify: (req, _res, buf) => { req.rawBody = buf; }
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Mount webhook router (signature verification happens inside)
-app.use('/webhook', webhookRouter);
+app.use('/webhook', webhookLimiter, webhookRouter);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -58,8 +104,8 @@ app.get('/demo', (req, res) => {
 app.get('/privacy', (req, res) => {
   res.send(`
     <!DOCTYPE html><html><head><title>Privacy Policy - House of Bhaves (HOB)</title><style>body{font-family:sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:0 auto;color:#222;}</style></head>
-    <body><h1>Privacy Policy</h1><p><strong>House of Bhaves (HOB)</strong> respects your privacy. We process customer names, phone numbers, and reservation details solely for table booking and restaurant communication via WhatsApp.</p>
-    <h2>Data Collection & Usage</h2><p>Data collected via WhatsApp is strictly used for managing table reservations, sending booking confirmations, and optional dining reminders.</p>
+    <body><h1>Privacy Policy</h1><p><strong>House of Bhaves (HOB)</strong> respects your privacy. We process patient names, phone numbers, and appointment details solely for appointment booking and clinic communication via WhatsApp.</p>
+    <h2>Data Collection & Usage</h2><p>Data collected via WhatsApp is strictly used for scheduling clinic appointments, sending booking confirmations, and care reminders.</p>
     <h2>Data Protection</h2><p>We do not sell or share personal data with third parties. For data deletion requests, contact us via the support address configured for your account.</p></body></html>
   `);
 });
@@ -321,14 +367,14 @@ app.all('/logout', (req, res) => {
 app.get('/terms', (req, res) => {
   res.send(`
     <!DOCTYPE html><html><head><title>Terms of Service - House of Bhaves (HOB)</title><style>body{font-family:sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:0 auto;color:#222;}</style></head>
-    <body><h1>Terms of Service</h1><p>By using the <strong>House of Bhaves (HOB)</strong> WhatsApp reservation system, you agree to receive automated reservation confirmations and dining notifications.</p></body></html>
+    <body><h1>Terms of Service</h1><p>By using the <strong>House of Bhaves (HOB)</strong> WhatsApp appointment booking system, you agree to receive automated appointment confirmations and visit notifications.</p></body></html>
   `);
 });
 
 app.get('/deletion', (req, res) => {
   res.send(`
     <!DOCTYPE html><html><head><title>User Data Deletion - House of Bhaves (HOB)</title><style>body{font-family:sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:0 auto;color:#222;}</style></head>
-    <body><h1>User Data Deletion Instructions</h1><p>To request deletion of your reservation data, please contact the restaurant/clinic you booked with directly, or reach out via the support channel configured for your account. All data will be removed within 48 hours of a verified request.</p></body></html>
+    <body><h1>User Data Deletion Instructions</h1><p>To request deletion of your appointment booking data, please contact the clinic you booked with directly, or reach out via the support channel configured for your account. All data will be removed within 48 hours of a verified request.</p></body></html>
   `);
 });
 
@@ -392,12 +438,12 @@ app.get(['/api/restaurant/:slug/export', '/api/client/:slug/export'], requireTen
     res.status(200).send(csvContent);
   } catch (error) {
     console.error('Export error:', error);
-    res.status(500).send('Failed to export CSV');
+    res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 });
 
 // Demo reservation creation endpoint — auth-gated, no hardcoded customer PII
-app.post('/api/reservations/demo', requireAuth, async (req, res) => {
+app.post('/api/reservations/demo', apiLimiter, requireAuth, async (req, res) => {
   try {
     const code = await generateReservationCode('DEMO');
     
@@ -438,12 +484,12 @@ app.post('/api/reservations/demo', requireAuth, async (req, res) => {
     res.json(newBooking);
   } catch (error) {
     console.error('Demo creation error:', error);
-    res.status(500).json({ error: 'Failed to create demo reservation' });
+    res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 });
 
 // Status update endpoint — auth-gated (was previously open to anyone)
-app.post('/api/reservations/status', requireAuth, async (req, res) => {
+app.post('/api/reservations/status', apiLimiter, requireAuth, async (req, res) => {
   try {
     const { reservationId, status } = req.body;
     const ALLOWED_STATUSES = ['booked', 'seated', 'completed', 'no_show', 'cancelled'];
@@ -492,7 +538,7 @@ app.post('/api/reservations/status', requireAuth, async (req, res) => {
     res.json({ success: true, reservation: updated });
   } catch (error) {
     console.error('Status update error:', error);
-    res.status(500).json({ error: 'Failed to update status' });
+    res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 });
 
@@ -516,6 +562,7 @@ app.get('/onboard', requireRole(['agency_admin']), (req, res) => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Meta Embedded Signup Onboarding | House of Bhaves Agency</title>
+  <meta name="description" content="Meta Embedded Signup Onboarding Portal for Healthcare & Dental Clinics">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -702,7 +749,7 @@ app.get('/onboard', requireRole(['agency_admin']), (req, res) => {
   <div class="form-container">
     <div class="form-header">
       <div class="brand-pill">House of Bhaves Tech Provider</div>
-      <h1>🍽️ Onboard Restaurant Client</h1>
+      <h1>🩺 Onboard Clinic Client</h1>
       <p>Meta Embedded Signup • Client-Owned WABA Delegation • Zero Agency Quota Limit</p>
     </div>
 
@@ -737,23 +784,23 @@ app.get('/onboard', requireRole(['agency_admin']), (req, res) => {
       </div>
     </div>
 
-    <!-- Step 2: Restaurant Profile & Automation Configuration -->
+    <!-- Step 2: Clinic Profile & Automation Configuration -->
     <form id="onboardForm" onsubmit="handleOnboardSubmit(event)">
       <input type="hidden" id="oauthCode" name="oauthCode" value="">
       <input type="hidden" id="wabaId" name="wabaId" value="">
       <input type="hidden" id="phoneNumberId" name="phoneNumberId" value="">
 
-      <h3 style="font-family: 'Space Grotesk', sans-serif; font-size: 16px; margin-bottom: 16px; color: #F59E0B;">Step 2: Restaurant Profile & Automation Settings</h3>
+      <h3 style="font-family: 'Space Grotesk', sans-serif; font-size: 16px; margin-bottom: 16px; color: #F59E0B;">Step 2: Clinic Profile & Automation Settings</h3>
 
       <div class="form-group">
-        <label>Restaurant Business Name *</label>
-        <input type="text" id="businessName" name="businessName" placeholder="e.g. Big Bang Community (BBC)" required>
+        <label>Clinic Name *</label>
+        <input type="text" id="businessName" name="businessName" placeholder="e.g. Radiance Dental & Aesthetics" required>
       </div>
 
       <div class="row-2">
         <div class="form-group">
           <label>Custom URL Slug *</label>
-          <input type="text" id="slug" name="slug" placeholder="e.g. big-bang-community" required>
+          <input type="text" id="slug" name="slug" placeholder="e.g. radiance-dental" required>
           <div class="note">Generates /restaurant/:slug live ledger</div>
         </div>
 
@@ -768,45 +815,45 @@ app.get('/onboard', requireRole(['agency_admin']), (req, res) => {
 
       <div class="row-2">
         <div class="form-group">
-          <label>Lunch Hours (Afternoon)</label>
-          <input type="text" id="openingHoursLunch" name="openingHoursLunch" placeholder="e.g. 12:00-15:30">
+          <label>Morning OPD Hours</label>
+          <input type="text" id="openingHoursLunch" name="openingHoursLunch" placeholder="e.g. 10:00-14:00">
         </div>
         <div class="form-group">
-          <label>Dinner Hours (Evening)</label>
-          <input type="text" id="openingHoursDinner" name="openingHoursDinner" placeholder="e.g. 19:00-00:30">
+          <label>Evening OPD Hours</label>
+          <input type="text" id="openingHoursDinner" name="openingHoursDinner" placeholder="e.g. 17:00-21:00">
         </div>
       </div>
 
       <div class="form-group">
         <label>Custom Bot Welcome Greeting (Optional)</label>
-        <textarea id="customWelcomeText" name="customWelcomeText" placeholder="e.g. Welcome to Big Bang Community (BBC)! Relaxed outdoor seating, live music & sports screenings. Tap below to book your table!"></textarea>
+        <textarea id="customWelcomeText" name="customWelcomeText" placeholder="e.g. Welcome to Radiance Dental & Aesthetics! Advanced dental implants, painless root canal & smile makeovers. Tap below to book your consultation!"></textarea>
       </div>
 
       <div class="form-group">
-        <label>Custom Cuisines & Chef Specials Guide (Optional)</label>
-        <textarea id="customMenuText" name="customMenuText" placeholder="e.g. 🥟 Dumplings & Dim Sums&#10;🍝 Homestyle Rice & Pastas&#10;🍗 Crispy Korean Chicken&#10;🍹 Cold Brew Shakerato & Craft Beers"></textarea>
+        <label>Treatments & Services Guide (Optional)</label>
+        <textarea id="customMenuText" name="customMenuText" placeholder="e.g. 🦷 Root Canal Treatment & Dental Implants&#10;✨ Laser Teeth Whitening & Polishing&#10;🩺 Specialist Consultation & Digital OPG X-Ray&#10;👶 Gentle Pediatric Dentistry & Aligners"></textarea>
       </div>
 
       <div class="form-group">
-        <label>Restaurant Address & Landmark</label>
-        <input type="text" id="address" name="address" placeholder="e.g. Royale Heritage Mall, NIBM Road, Pune">
+        <label>Clinic Address & Landmark</label>
+        <input type="text" id="address" name="address" placeholder="e.g. 3rd Floor, Medical Enclave, MG Road, Pune">
       </div>
 
       <div class="row-2">
         <div class="form-group">
-          <label>Reservation Code Prefix *</label>
-          <input type="text" id="prefix" name="prefix" placeholder="e.g. BBC" required>
+          <label>Appointment Code Prefix *</label>
+          <input type="text" id="prefix" name="prefix" placeholder="e.g. RAD" required>
         </div>
 
         <div class="form-group">
-          <label>Manager WhatsApp Phone</label>
+          <label>Doctor / Reception WhatsApp Phone</label>
           <input type="text" id="managerPhone" name="managerPhone" placeholder="e.g. 919511673214">
         </div>
       </div>
 
       <div class="form-group">
         <label>Google Review URL</label>
-        <input type="text" id="googleReviewUrl" name="googleReviewUrl" placeholder="e.g. https://maps.google.com/?q=Big+Bang+Community">
+        <input type="text" id="googleReviewUrl" name="googleReviewUrl" placeholder="e.g. https://maps.google.com/?q=Radiance+Dental+Pune">
       </div>
 
       <!-- Optional Legacy/Manual Token Fallback for testing -->
@@ -825,7 +872,7 @@ app.get('/onboard', requireRole(['agency_admin']), (req, res) => {
         </div>
       </div>
 
-      <button type="submit" class="submit-btn" id="submitBtn">✨ Save & Activate Restaurant Client</button>
+      <button type="submit" class="submit-btn" id="submitBtn">✨ Save & Activate Clinic Client</button>
     </form>
   </div>
 
@@ -956,12 +1003,12 @@ app.get('/onboard', requireRole(['agency_admin']), (req, res) => {
         } else {
           alert('Onboarding failed: ' + (result.error || 'Check server logs.'));
           submitBtn.disabled = false;
-          submitBtn.innerText = '✨ Save & Activate Restaurant Client';
+          submitBtn.innerText = '✨ Save & Activate Clinic Client';
         }
       } catch (err) {
         alert('Network error during onboarding: ' + err.message);
         submitBtn.disabled = false;
-        submitBtn.innerText = '✨ Save & Activate Restaurant Client';
+        submitBtn.innerText = '✨ Save & Activate Clinic Client';
       }
     }
   </script>
@@ -1067,7 +1114,7 @@ app.post('/api/agency/embedded-signup/exchange', requireRole(['agency_admin']), 
         embeddedSignupCompletedAt = new Date().toISOString();
       } catch (exchangeErr: any) {
         console.error('❌ [Embedded Signup Exchange Failed]:', exchangeErr);
-        return res.status(500).json({ error: `Meta Token Exchange failed: ${exchangeErr.message}` });
+        return res.status(500).json({ error: 'Something went wrong. Please try again.' });
       }
     } else if (whatsappPhoneNumberId || metaAccessToken) {
       // Manual Legacy Fallback
@@ -1143,12 +1190,12 @@ app.post('/api/agency/embedded-signup/exchange', requireRole(['agency_admin']), 
     });
   } catch (error: any) {
     console.error('❌ [Provisioning Error]:', error);
-    res.status(500).json({ error: error.message || 'Onboarding failed. Check server logs.' });
+    res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 });
 
 // Legacy POST /api/agency/onboard redirect adapter
-app.post('/api/agency/onboard', requireRole(['agency_admin']), async (req, res) => {
+app.post('/api/agency/onboard', apiLimiter, requireRole(['agency_admin']), async (req, res) => {
   // Pass through to embedded-signup exchange handler
   req.url = '/api/agency/embedded-signup/exchange';
   return app._router.handle(req, res);
@@ -1174,7 +1221,7 @@ app.get('/agency', requireRole(['agency_admin']), async (req, res) => {
     const profitMargin = mrr > 0 ? 100 : 100;
 
     const clientRowsHtml = clientList.length === 0
-      ? `<tr><td colspan="6" style="text-align:center; padding: 40px; color: #A8A29E;">No restaurants onboarded yet. Click "Onboard New Restaurant" to get started!</td></tr>`
+      ? `<tr><td colspan="6" style="text-align:center; padding: 40px; color: #A8A29E;">No clinics onboarded yet. Click "Onboard New Clinic" to get started!</td></tr>`
       : clientList.map(c => {
       const tierPrice = c.billingCycle === 'quarterly' ? 'Quarterly: ₹24,999 / qtr' : 'Monthly: ₹9,999 / mo';
       const tierBadgeClass = c.billingCycle === 'quarterly' ? 'tier-quarterly' : 'tier-monthly';
@@ -1258,7 +1305,7 @@ app.get('/agency', requireRole(['agency_admin']), async (req, res) => {
     .agency-title h1 {
       font-family: 'Space Grotesk', sans-serif;
       font-size: 26px;
-      font-weight: 700;
+      weight: 700;
       color: #F59E0B;
     }
     .agency-title p { color: #A8A29E; font-size: 13px; margin-top: 4px; }
@@ -1394,11 +1441,11 @@ app.get('/agency', requireRole(['agency_admin']), async (req, res) => {
   <div class="container">
     <div class="header-banner">
       <div class="agency-title">
-        <h1>🍽️ Restaurant Agency Operations Master</h1>
+        <h1>🩺 Clinic Agency Operations Master</h1>
         <p>Pure WhatsApp Automation Account Ledger • House of Bhaves • Logged in as: <strong>${escapeHtml(req.user?.email || 'Admin')}</strong></p>
       </div>
       <div class="header-right-btns">
-        <a href="/onboard" class="btn-onboard">➕ Onboard New Restaurant</a>
+        <a href="/onboard" class="btn-onboard">➕ Onboard New Clinic</a>
         <a href="/logout" class="btn-logout">🚪 Logout</a>
         <div class="mrr-badge">
           💰 MRR: ₹${mrr.toLocaleString('en-IN')}/mo
@@ -1409,7 +1456,7 @@ app.get('/agency', requireRole(['agency_admin']), async (req, res) => {
     <div class="metrics-grid">
       <div class="metric-card">
         <div class="metric-val val-amber">${activeClientsCount}</div>
-        <div class="metric-lbl">Active Restaurants</div>
+        <div class="metric-lbl">Active Clinics</div>
       </div>
       <div class="metric-card">
         <div class="metric-val">${tier1Count} / ${tier2Count}</div>
@@ -1434,12 +1481,12 @@ app.get('/agency', requireRole(['agency_admin']), async (req, res) => {
       <table>
         <thead>
           <tr>
-            <th>Restaurant Client</th>
+            <th>Clinic Client</th>
             <th>Automation Plan</th>
             <th>Booking Engine Status</th>
             <th>Engine Availability</th>
             <th>Meta API Out-of-Pocket</th>
-            <th>Hostess Logbook</th>
+            <th>Reception Logbook</th>
           </tr>
         </thead>
         <tbody>
@@ -1561,10 +1608,10 @@ app.get(['/restaurant/:slug?', '/client/:slug?'], requireTenantAccess('slug'), a
           `;
         }
         
-        const occasionEmoji = r.occasion?.toLowerCase() === 'birthday' ? '🎂 ' :
-                             r.occasion?.toLowerCase() === 'anniversary' ? '🥂 ' :
-                             r.occasion?.toLowerCase() === 'party' ? '🎉 ' :
-                             r.occasion?.toLowerCase() === 'corporate' ? '💼 ' : '🍽️ ';
+        const occasionEmoji = r.occasion?.toLowerCase() === 'birthday' ? '✨ ' :
+                             r.occasion?.toLowerCase() === 'anniversary' ? '🩺 ' :
+                             r.occasion?.toLowerCase() === 'party' ? '💉 ' :
+                             r.occasion?.toLowerCase() === 'corporate' ? '📋 ' : '🩺 ';
         
         // FIX: escapeHtml applied to customerName, phone, code, occasion before interpolating
         return `
@@ -1578,12 +1625,12 @@ app.get(['/restaurant/:slug?', '/client/:slug?'], requireTenantAccess('slug'), a
               
               <div class="details-grid">
                 <div class="detail-item">
-                  <span class="detail-label">Guests</span>
+                  <span class="detail-label">Patients</span>
                   <span class="detail-value">👥 ${escapeHtml(r.guests)}</span>
                 </div>
                 <div class="detail-item">
-                  <span class="detail-label">Occasion</span>
-                  <span class="detail-value">${occasionEmoji}${escapeHtml(r.occasion || 'None')}</span>
+                  <span class="detail-label">Service</span>
+                  <span class="detail-value">${occasionEmoji}${escapeHtml(r.occasion || 'General OPD')}</span>
                 </div>
                 <div class="detail-item">
                   <span class="detail-label">Date & Time</span>
@@ -1609,8 +1656,8 @@ app.get(['/restaurant/:slug?', '/client/:slug?'], requireTenantAccess('slug'), a
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(displayName)} | Hostess Ledger</title>
-  <meta name="description" content="Private Booking Ledger for ${escapeHtml(displayName)}">
+  <title>${escapeHtml(displayName)} | Reception Logbook</title>
+  <meta name="description" content="Private Appointment Logbook for ${escapeHtml(displayName)}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1741,7 +1788,7 @@ app.get(['/restaurant/:slug?', '/client/:slug?'], requireTenantAccess('slug'), a
       flex: 1;
       min-width: 260px;
       background: #121110;
-      border: 1.5px solid #3E3A33;
+      border: 1.5px solid #3E3932;
       color: #F3EFE6;
       padding: 12px 18px;
       border-radius: 10px;
@@ -1750,7 +1797,7 @@ app.get(['/restaurant/:slug?', '/client/:slug?'], requireTenantAccess('slug'), a
     .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
     .tab-btn {
       background: #121110;
-      border: 1.5px solid #3E3A33;
+      border: 1.5px solid #3E3932;
       color: #A8A29E;
       padding: 10px 16px;
       border-radius: 8px;
@@ -1842,7 +1889,7 @@ app.get(['/restaurant/:slug?', '/client/:slug?'], requireTenantAccess('slug'), a
     <div class="header-card">
       <div class="restaurant-title">
         <h1>${escapeHtml(displayName)}</h1>
-        <p>Hostess Front-Desk Ledger • URL Slug: /restaurant/${escapeHtml(displaySlug)} • Logged in: <strong>${escapeHtml(req.user?.email || 'User')}</strong></p>
+        <p>Reception Front-Desk Logbook • URL Slug: /restaurant/${escapeHtml(displaySlug)} • Logged in: <strong>${escapeHtml(req.user?.email || 'User')}</strong></p>
       </div>
       <div class="header-right">
         ${req.user?.role === 'agency_admin' ? '<a href="/agency" class="btn-export" style="background:#262320; border:1px solid #3E3932; color:#F3EFE6;">🏛️ Agency Master</a>' : ''}
@@ -1857,19 +1904,19 @@ app.get(['/restaurant/:slug?', '/client/:slug?'], requireTenantAccess('slug'), a
     <div class="metrics-grid">
       <div class="metric-card">
         <div class="metric-value">${totalReservations}</div>
-        <div class="metric-label">🍽️ Total Tables</div>
+        <div class="metric-label">🩺 Total Appointments</div>
       </div>
       <div class="metric-card">
         <div class="metric-value">${seatedCount}</div>
-        <div class="metric-label">🪑 Seated Now</div>
+        <div class="metric-label">🪑 In Clinic Now</div>
       </div>
       <div class="metric-card">
         <div class="metric-value">${birthdays}</div>
-        <div class="metric-label">🎂 Birthdays</div>
+        <div class="metric-label">✨ Preventive Care</div>
       </div>
       <div class="metric-card">
         <div class="metric-value">${parties}</div>
-        <div class="metric-label">🎉 Parties</div>
+        <div class="metric-label">💉 Procedures</div>
       </div>
       <div class="metric-card">
         <div class="metric-value">${noShows}</div>

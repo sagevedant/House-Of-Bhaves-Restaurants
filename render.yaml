@@ -14,7 +14,11 @@ services:
         value: ./data/hob-restaurant.db
       - key: MOCK_WHATSAPP
         value: "false"
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
       - key: WEBHOOK_VERIFY_TOKEN
-        value: "hob_restaurant_secret"
+        sync: false
       - key: MANAGER_PHONE
-        value: "919699533441"
+        sync: false

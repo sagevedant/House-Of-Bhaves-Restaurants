@@ -97,14 +97,14 @@ async function handleDateTimeTime(event, conversation, client, stepData) {
     return { nextStep: 'datetime_time', stepData };
 }
 async function sendConfirmPrompt(client, phone, stepData, conversation) {
-    const occLabels = {
-        casual: 'Consultation & Checkup 🩺',
-        birthday: 'Teeth Whitening ✨',
-        anniversary: 'Anniversary Special 🥂',
-        corporate: 'Aligners & Braces 🦷',
-        party: 'Root Canal & Implants 💉'
+    const defaultTreatmentLabels = {
+        casual: 'General Consultation & OPD 🩺',
+        birthday: 'Preventive Care & Screening ✨',
+        anniversary: 'Specialist Consultation 🩺',
+        corporate: 'Therapy & Follow-up Visit 📋',
+        party: 'Procedure & Treatment Session 💉'
     };
-    const treatmentLabel = occLabels[stepData.occasion || 'casual'] || 'Consultation & Checkup 🩺';
+    const treatmentLabel = defaultTreatmentLabels[stepData.occasion || 'casual'] || 'General Consultation & OPD 🩺';
     const text = `📋 *Your Appointment Summary:*\n\n🩺 ${client.businessName}\n👤 ${conversation.customerName || stepData.customerName || 'Patient'}\n✨ ${treatmentLabel}\n📅 ${(0, dateHelpers_1.formatDate)(stepData.date)}\n🕐 ${(0, dateHelpers_1.formatTime)(stepData.time)}\n\nDoes everything look good?`;
     await (0, sender_1.sendButtons)(client, phone, text, [
         { id: 'confirm_yes', title: 'Confirm ✅' },

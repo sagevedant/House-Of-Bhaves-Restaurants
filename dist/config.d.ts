@@ -19,5 +19,7 @@ export declare const config: {
     adminBasicAuthUser: string;
     adminBasicAuthPass: string;
     jwtSecret: string;
+    debugVerboseLogging: boolean;
+    adminFrontendOrigin: string;
 };
 //# sourceMappingURL=config.d.ts.map

@@ -2,6 +2,7 @@ import { db } from '../db/connection';
 import { bookings, customers, clients } from '../db/schema';
 import { eq, and, lte } from 'drizzle-orm';
 import { sendText } from '../whatsapp/sender';
+import { config } from '../config';
 
 /**
  * Schedule Same-Day Review:
@@ -59,7 +60,9 @@ export async function processPendingReviewQueue(): Promise<{ processedCount: num
           const lastInboundMs = new Date(customerList[0].lastInboundInteraction).getTime();
           const elapsedHours = (nowMs - lastInboundMs) / (1000 * 60 * 60);
           isWithin24hWindow = elapsedHours < 24;
-          console.log(`⏱️ [24-Hour Window Validation] Phone: ${booking.customerPhone}, Elapsed: ${elapsedHours.toFixed(1)} hrs, Within 24h: ${isWithin24hWindow}`);
+          if (config.debugVerboseLogging) {
+            console.log(`⏱️ [24-Hour Window Validation] Phone: ${booking.customerPhone}, Elapsed: ${elapsedHours.toFixed(1)} hrs, Within 24h: ${isWithin24hWindow}`);
+          }
         }
       } else {
         // Fallback: If booking created within 24h, assume active window
@@ -81,10 +84,10 @@ export async function processPendingReviewQueue(): Promise<{ processedCount: num
           .set({ reviewSent: true })
           .where(eq(bookings.id, booking.id));
 
-        console.log(`🎉 [Same-Day Review Delivered - Net Cost: ₹0.00] Sent free-form review request to ${booking.customerPhone}`);
+        console.log(`🎉 [Same-Day Review Delivered - Net Cost: ₹0.00] Sent review request for Booking #${booking.id}`);
         freeDeliveredCount++;
       } else {
-        console.log(`⚠️ [24-Hour Window Closed] Cannot send free-form review request to ${booking.customerPhone}. Window elapsed.`);
+        console.log(`⚠️ [24-Hour Window Closed] Cannot send free-form review request for Booking #${booking.id}. Window elapsed.`);
         // Mark reviewSent = true to avoid infinite retry outside window
         await db
           .update(bookings)

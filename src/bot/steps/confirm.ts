@@ -100,15 +100,17 @@ export async function handleFinalize(
     timestamp: new Date().toISOString(),
   });
 
-  const occLabels: Record<string, string> = { 
-    casual: 'Consultation & Checkup', 
-    birthday: 'Teeth Whitening', 
-    anniversary: 'Anniversary Special', 
-    corporate: 'Aligners & Braces', 
-    party: 'Root Canal & Implants' 
+  // Default treatment labels applicable across multi-disciplinary clinics (Dental, Physio, Aesthetics, General OPD)
+  const defaultTreatmentLabels: Record<string, string> = { 
+    casual: 'General Consultation & OPD', 
+    birthday: 'Preventive Care & Screening', 
+    anniversary: 'Specialist Consultation', 
+    corporate: 'Therapy & Follow-up Visit', 
+    party: 'Procedure & Treatment Session' 
   };
-  
-  const treatmentType = occLabels[stepData.occasion || 'casual'] || 'Consultation';
+
+  // Allow client customMenuText / custom services guide to supply custom labels if structured, or use defaults
+  const treatmentType = defaultTreatmentLabels[stepData.occasion || 'casual'] || 'Specialist Consultation';
 
   if (client.managerPhone) {
     await sendText(client, client.managerPhone, `🔔 *New Appointment Alert!*\n\n👤 ${customerName}\n📱 +${conversation.phone}\n🩺 ${treatmentType}\n📅 ${formatDate(stepData.date!)} · ${formatTime(stepData.time!)}\n🎫 ${code}`);

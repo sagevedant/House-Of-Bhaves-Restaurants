@@ -28,16 +28,21 @@ export async function callMessagesApi(client: Client, payload: object): Promise<
 
   const isMock = config.mockWhatsApp || !token || token.startsWith('PLACEHOLDER') || token === 'default';
 
-  const tokenSnippet = token ? `${token.slice(0, 10)}... (length ${token.length})` : 'EMPTY';
-  console.log(`📡 [OUTBOUND WA CHECK]: Phone ID='${phoneId}', Token='${tokenSnippet}', mockMode=${isMock}`);
+  console.log(`📡 [OUTBOUND WA CHECK]: Phone ID='${phoneId}', TokenConfigured=${Boolean(token)}, mockMode=${isMock}`);
 
   if (isMock) {
-    console.log(`ℹ️ [MOCK WA MODE ACTIVE - ${client.businessName}] Payload:`, JSON.stringify(payload, null, 2));
+    if (config.debugVerboseLogging) {
+      console.log(`ℹ️ [MOCK WA MODE ACTIVE - ${client.businessName}] Payload:`, JSON.stringify(payload, null, 2));
+    } else {
+      console.log(`ℹ️ [MOCK WA MODE ACTIVE - ${client.businessName}] Dispatched mock message to recipient.`);
+    }
     return;
   }
 
   const url = `${config.metaApiBase}/${phoneId}/messages`;
-  console.log(`🚀 [SENDING TO META API]: URL='${url}' to '${(payload as any).to}'`);
+  if (config.debugVerboseLogging) {
+    console.log(`🚀 [SENDING TO META API]: URL='${url}' to '${(payload as any).to}'`);
+  }
 
   try {
     const response = await fetch(url, {

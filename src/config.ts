@@ -14,17 +14,32 @@ dotenv.config();
 function requireEnv(name: string): string {
   const val = process.env[name];
   if (!val || !val.trim()) {
-    throw new Error(
-      `[FATAL CONFIG ERROR] Missing required environment variable: ${name}. ` +
-      `Set it in your .env file — the app will not start without it.`
+    console.error(
+      `\n❌ [FATAL CONFIG ERROR] Missing required environment variable: ${name}.\n` +
+      `   Set it in your .env file before starting the server.\n`
     );
+    process.exit(1);
   }
   return val.trim();
 }
 
 if (!process.env.TURSO_DATABASE_URL || !process.env.TURSO_DATABASE_URL.trim() || 
     !process.env.TURSO_AUTH_TOKEN || !process.env.TURSO_AUTH_TOKEN.trim()) {
-  throw new Error('[FATAL CONFIG ERROR] Missing TURSO_DATABASE_URL or TURSO_AUTH_TOKEN environment variable. Set them in your .env file.');
+  console.error(
+    `\n❌ [FATAL CONFIG ERROR] Missing TURSO_DATABASE_URL or TURSO_AUTH_TOKEN.\n` +
+    `   Turso database connection credentials must be supplied via .env with NO fallback string.\n`
+  );
+  process.exit(1);
+}
+
+if (!process.env.WEBHOOK_VERIFY_TOKEN || !process.env.WEBHOOK_VERIFY_TOKEN.trim()) {
+  const suggestedSecret = require('crypto').randomBytes(24).toString('hex');
+  console.error(
+    `\n❌ [FATAL CONFIG ERROR] Missing WEBHOOK_VERIFY_TOKEN in .env.\n` +
+    `   No default fallback string is permitted. Please add this to your .env file:\n` +
+    `   WEBHOOK_VERIFY_TOKEN=${suggestedSecret}\n`
+  );
+  process.exit(1);
 }
 
 export const config = {
@@ -52,6 +67,8 @@ export const config = {
   adminBasicAuthUser: process.env.ADMIN_BASIC_AUTH_USER || '',
   adminBasicAuthPass: process.env.ADMIN_BASIC_AUTH_PASS || '',
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-hob-agency-platform-2026-secure-key',
+  debugVerboseLogging: process.env.DEBUG_VERBOSE_LOGGING === 'true',
+  adminFrontendOrigin: process.env.ADMIN_FRONTEND_ORIGIN || 'http://localhost:5173',
 };
 
 if (!config.enforceWebhookSignature) {

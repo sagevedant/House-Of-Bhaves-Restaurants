@@ -4,6 +4,7 @@ exports.handleIncomingEvent = handleIncomingEvent;
 const connection_1 = require("../db/connection");
 const schema_1 = require("../db/schema");
 const drizzle_orm_1 = require("drizzle-orm");
+const config_1 = require("../config");
 const sender_1 = require("../whatsapp/sender");
 const fallback_1 = require("./fallback");
 const entry_1 = require("./steps/entry");
@@ -41,7 +42,12 @@ async function handleIncomingEvent(phoneNumberId, event) {
     const convResult = await connection_1.db.select().from(schema_1.conversations).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.conversations.phone, phone), (0, drizzle_orm_1.eq)(schema_1.conversations.clientId, client.id))).limit(1);
     let conversation;
     if (!convResult || convResult.length === 0) {
-        console.log(`✨ Router: Creating NEW conversation for phone '${phone}' at client '${client.businessName}'`);
+        if (config_1.config.debugVerboseLogging) {
+            console.log(`✨ Router: Creating NEW conversation for phone '${phone}' at client '${client.businessName}'`);
+        }
+        else {
+            console.log(`✨ Router: Creating NEW conversation for client '${client.businessName}'`);
+        }
         const [newConv] = await connection_1.db.insert(schema_1.conversations).values({
             phone,
             clientId: client.id,

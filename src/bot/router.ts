@@ -1,6 +1,7 @@
 import { db } from '../db/connection';
 import { clients, conversations, type Client, type Conversation, type StepData } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
+import { config } from '../config';
 import { WhatsAppEvent, WhatsAppMessageEvent } from '../whatsapp/parser';
 import { sendText, markAsRead } from '../whatsapp/sender';
 import { handleFallback } from './fallback';
@@ -48,7 +49,11 @@ export async function handleIncomingEvent(phoneNumberId: string, event: WhatsApp
 
   let conversation: Conversation;
   if (!convResult || convResult.length === 0) {
-    console.log(`✨ Router: Creating NEW conversation for phone '${phone}' at client '${client.businessName}'`);
+    if (config.debugVerboseLogging) {
+      console.log(`✨ Router: Creating NEW conversation for phone '${phone}' at client '${client.businessName}'`);
+    } else {
+      console.log(`✨ Router: Creating NEW conversation for client '${client.businessName}'`);
+    }
     const [newConv] = await db.insert(conversations).values({
       phone,
       clientId: client.id,

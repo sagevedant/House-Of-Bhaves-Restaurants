@@ -4,20 +4,46 @@ interface FAQEntry {
 }
 
 const FAQ_DATABASE: FAQEntry[] = [
-  { keywords: ['valet', 'parking', 'park', 'gaadi'], answer: '🚗 Yes! We offer complimentary valet parking for all guests. Self-parking is also available in the basement.' },
-  { keywords: ['menu', 'khana', 'food', 'dishes'], answer: '📋 Our menu features a curated mix of North Indian, Continental & Asian cuisines. Chef\'s specials change daily! Ask your server for today\'s recommendations.' },
-  { keywords: ['location', 'address', 'kahan', 'where', 'directions'], answer: '📍 Spice Factory Rooftop & Lounge\nBaner Road, Pune 411045\nLandmark: Next to Phoenix Mall\n\nGoogle Maps: Just search "Spice Factory Pune"!' },
-  { keywords: ['dress', 'code', 'kapde', 'wear'], answer: '👔 Smart casual. No slippers or shorts please. We want you to feel as good as the food tastes!' },
-  { keywords: ['wifi', 'internet', 'net'], answer: '📶 Free WiFi available! Ask your host for the password when you arrive.' },
-  { keywords: ['kids', 'children', 'bacche', 'baby', 'child'], answer: '👶 Absolutely! We have a dedicated kids\' play area and a special kids\' menu. Your little ones will love it!' },
-  { keywords: ['hookah', 'sheesha', 'smoke'], answer: '💨 Hookah is available on our rooftop section with a dedicated lounge area.' },
-  { keywords: ['pet', 'dog', 'kutte', 'animal'], answer: '🐕 We are pet-friendly! We recommend our outdoor/garden seating for guests with pets. Water bowls provided!' },
-  { keywords: ['birthday', 'bday', 'cake', 'decoration'], answer: '🎂 For birthday celebrations, we offer complimentary cake, table decoration, and a special birthday song from our team! Just let us know when booking.' },
-  { keywords: ['timing', 'hours', 'time', 'open', 'close', 'band'], answer: '🕐 Our hours:\n🌞 Lunch: 12:00 PM – 3:30 PM\n🌙 Dinner: 7:00 PM – 11:00 PM\n📅 Closed on Mondays' },
-  { keywords: ['cost', 'price', 'expensive', 'budget', 'kitna', 'mehnga'], answer: '💰 Average cost for two is approximately ₹1,200-₹1,800 (without alcohol). We have options for every budget!' },
-  { keywords: ['alcohol', 'bar', 'drink', 'beer', 'wine', 'cocktail', 'daaru'], answer: '🍷 Yes! We have a fully stocked bar with craft cocktails, imported wines, premium spirits, and local brews. Happy Hours: 5-7 PM!' },
-  { keywords: ['private', 'area', 'section', 'separate'], answer: '🏠 Yes, we have private dining areas available for corporate events and special celebrations. Minimum 8 guests for private sections.' },
-  { keywords: ['music', 'dj', 'live', 'band'], answer: '🎵 Live music on Friday & Saturday evenings! DJ nights every Saturday from 9 PM.' },
+  { 
+    keywords: ['reschedule', 'cancel', 'postpone', 'change date', 'change time', 'badalna'], 
+    answer: '🗓️ *Rescheduling & Cancellation Policy:*\nYou can reschedule or cancel your appointment free of charge at least 2 hours before your scheduled slot. Just message us here with your booking code to pick a new time.' 
+  },
+  { 
+    keywords: ['insurance', 'tpa', 'cashless', 'mediclaim', 'payment', 'upi', 'card', 'gpay', 'paytm'], 
+    answer: '💳 *Insurance & Payment Methods:*\nWe accept all major UPI apps (GPay/PhonePe/Paytm), credit/debit cards, and cash. We also provide itemized medical bills and diagnostic receipts for insurance reimbursement & select cashless TPA claims.' 
+  },
+  { 
+    keywords: ['parking', 'park', 'valet', 'car', 'bike', 'gaadi'], 
+    answer: '🚗 *Parking Availability:*\nDedicated patient parking is available at the clinic premises and adjacent visitor parking bays.' 
+  },
+  { 
+    keywords: ['wait', 'waiting', 'delay', 'time lag', 'kitna time'], 
+    answer: '⏱️ *Typical Wait Times:*\nPatients with prior bookings are prioritized with an average wait time of 5–10 minutes. In case of an ongoing minor procedure, our receptionist will update you upon arrival.' 
+  },
+  { 
+    keywords: ['first visit', 'bring', 'documents', 'reports', 'prescription', 'pehle'], 
+    answer: '📋 *What to Bring to Your First Visit:*\n1. Any past medical/dental prescriptions or X-rays\n2. Current medication list\n3. Valid Photo ID\n4. Your WhatsApp booking code' 
+  },
+  { 
+    keywords: ['emergency', 'walk-in', 'walk in', 'urgent', 'pain', 'dard', 'emergency care'], 
+    answer: '🚨 *Emergency & Walk-In Policy:*\nWalk-in emergencies (severe acute pain, trauma, bleeding) are attended to immediately by our duty doctor. For non-urgent visits, we recommend booking a slot to avoid wait times.' 
+  },
+  { 
+    keywords: ['kids', 'children', 'child', 'pediatric', 'bacche', 'toddler'], 
+    answer: '👶 *Pediatric & Child Care:*\nYes! We have pediatric-trained specialists and a gentle, child-friendly environment designed to make visits comfortable and stress-free for young patients.' 
+  },
+  { 
+    keywords: ['timing', 'hours', 'time', 'open', 'close', 'opd', 'band', 'sunday'], 
+    answer: '🕐 *OPD Hours:*\n🌞 Morning OPD: 10:00 AM – 2:00 PM\n🌙 Evening OPD: 5:00 PM – 9:00 PM\n📅 Open Monday through Saturday (Sunday by prior appointment)' 
+  },
+  { 
+    keywords: ['consultation fee', 'cost', 'price', 'charges', 'fees', 'kitna', 'rate'], 
+    answer: '🩺 *Consultation Charges:*\nStandard specialist consultation starts from ₹300–₹500. Detailed treatment plans and transparent cost estimates will be provided after your initial checkup.' 
+  },
+  { 
+    keywords: ['location', 'address', 'kahan', 'where', 'directions', 'landmark'], 
+    answer: '📍 *Clinic Location:*\nPlease refer to the clinic address and Google Maps directions link shared in your appointment confirmation message.' 
+  }
 ];
 
 export function findAnswer(question: string): string | null {

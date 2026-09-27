@@ -6,6 +6,7 @@ const connection_1 = require("../db/connection");
 const schema_1 = require("../db/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const sender_1 = require("../whatsapp/sender");
+const config_1 = require("../config");
 /**
  * Schedule Same-Day Review:
  * Sets reviewScheduledAt to Now + 2 Hours when booking status becomes 'seated' / 'show'.
@@ -51,7 +52,9 @@ async function processPendingReviewQueue() {
                     const lastInboundMs = new Date(customerList[0].lastInboundInteraction).getTime();
                     const elapsedHours = (nowMs - lastInboundMs) / (1000 * 60 * 60);
                     isWithin24hWindow = elapsedHours < 24;
-                    console.log(`⏱️ [24-Hour Window Validation] Phone: ${booking.customerPhone}, Elapsed: ${elapsedHours.toFixed(1)} hrs, Within 24h: ${isWithin24hWindow}`);
+                    if (config_1.config.debugVerboseLogging) {
+                        console.log(`⏱️ [24-Hour Window Validation] Phone: ${booking.customerPhone}, Elapsed: ${elapsedHours.toFixed(1)} hrs, Within 24h: ${isWithin24hWindow}`);
+                    }
                 }
             }
             else {
@@ -69,11 +72,11 @@ async function processPendingReviewQueue() {
                     .update(schema_1.bookings)
                     .set({ reviewSent: true })
                     .where((0, drizzle_orm_1.eq)(schema_1.bookings.id, booking.id));
-                console.log(`🎉 [Same-Day Review Delivered - Net Cost: ₹0.00] Sent free-form review request to ${booking.customerPhone}`);
+                console.log(`🎉 [Same-Day Review Delivered - Net Cost: ₹0.00] Sent review request for Booking #${booking.id}`);
                 freeDeliveredCount++;
             }
             else {
-                console.log(`⚠️ [24-Hour Window Closed] Cannot send free-form review request to ${booking.customerPhone}. Window elapsed.`);
+                console.log(`⚠️ [24-Hour Window Closed] Cannot send free-form review request for Booking #${booking.id}. Window elapsed.`);
                 // Mark reviewSent = true to avoid infinite retry outside window
                 await connection_1.db
                     .update(schema_1.bookings)
